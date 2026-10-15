@@ -1,0 +1,11 @@
+{
+  "name": "goofy-duel",
+  "version": "0.1.0",
+  "description": "A goofy directional-combat dueling game where limbs come off. Browser client + local Node server.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js"
+  }
+}

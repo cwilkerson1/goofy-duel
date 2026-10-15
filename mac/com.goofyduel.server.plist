@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Keeps the Goofy Duel server running on the Mac mini, and restarts it after a crash or reboot.
+  Replace /Users/YOURNAME/goofy-duel with where the game folder lives, and the node path with
+  the output of `which node` (Apple Silicon Homebrew: /opt/homebrew/bin/node).
+  Install:  cp mac/com.goofyduel.server.plist ~/Library/LaunchAgents/
+            launchctl load ~/Library/LaunchAgents/com.goofyduel.server.plist
+  Stop:     launchctl unload ~/Library/LaunchAgents/com.goofyduel.server.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.goofyduel.server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>/Users/YOURNAME/goofy-duel/server.js</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/YOURNAME/goofy-duel</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>PORT</key><string>3000</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/goofyduel.log</string>
+  <key>StandardErrorPath</key><string>/tmp/goofyduel.log</string>
+</dict>
+</plist>
