@@ -114,7 +114,7 @@ found the sweet spot:
 | Chicken, Baguette, Trout | Beak, crusty end, face | |
 
 **Blunt weapons** (hammer, chicken, baguette, trout, pan, fists) can still knock limbs and heads off,
-but every hit also **bruises**: the body part turns purple and you keep losing health over time, so
+but every hit also **bruises**: the body part darkens and you keep losing health over time, so
 they can win by bruising someone to death.
 
 **Practice one weapon:** `WEAPON=scythe npm start` makes the wheel always land on that weapon
@@ -166,7 +166,10 @@ legacy-2d/         The earlier side-view 2D version, kept for reference (not ser
 starts when each fight begins and fades out when the round ends; with several files, each fight picks
 a different one. No restart is needed: just refresh the page. **M** mutes music and sounds.
 
-**Graphics.** The game uses glow (bloom), moonlit reflections and a soft vignette. On a slow computer,
-add `?lowfx` to the end of the address to turn those effects off.
+**Graphics.** The knights wear great helms, mail and team-coloured surcoats, and fight in a moonlit stone
+arena. All textures (stone, earth, wood, mail, steel, cloth) are generated in code when the page loads,
+so there are no image files to download. On top of that there's ambient occlusion (soft contact shadows),
+glow, reflections and a vignette. On a slow computer, add `?lowfx` to the end of the address to turn the
+screen effects off.
 
 Tuning knobs (timings in `T`, stamina costs in `COST`, damage and swing arcs in `SWING`, part health) are at the top of `shared/sim.js`.
