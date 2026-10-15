@@ -928,7 +928,12 @@ function frame(now) {
   const players = interpPlayers();
   const me = players.find((p) => p && p.id === myId) || null;
   const opp = players.find((p) => p && p.id !== myId) || null;
-  if (cur && cur.phase !== lastPhase) { if (cur.phase === 'fight') fightFlash = 1; lastPhase = cur.phase; }
+  if (cur && cur.phase !== lastPhase) {
+    if (cur.phase === 'fight') { fightFlash = 1; music.start(); }
+    else music.stop();
+    lastPhase = cur.phase;
+  }
+  music.step(dt);
   fightFlash = Math.max(0, fightFlash - dt);
   if (me) sendInput(dt);
 
@@ -980,6 +985,32 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // ---------- goofy synth sounds ----------
+// Fight music: plays a random track from public/music/ when a fight starts, fades out when the round ends.
+const music = (() => {
+  let tracks = [], el = null, target = 0, lastTrack = null;
+  const VOL = 0.45;
+  fetch('/music.json').then((r) => r.json()).then((list) => { tracks = list; }).catch(() => {});
+  return {
+    start() {
+      if (!tracks.length) return;
+      // A different track each fight when there's more than one.
+      const choices = tracks.length > 1 ? tracks.filter((t) => t !== lastTrack) : tracks;
+      const t = choices[(Math.random() * choices.length) | 0];
+      if (!el || lastTrack !== t) { if (el) el.pause(); el = new Audio(t); el.loop = true; el.volume = 0; lastTrack = t; }
+      else el.currentTime = 0;
+      el.play().catch(() => {});
+      target = VOL;
+    },
+    stop() { target = 0; },
+    step(dt) {
+      if (!el) return;
+      const goal = audio.muted ? 0 : target;
+      el.volume = Math.max(0, Math.min(1, el.volume + Math.sign(goal - el.volume) * Math.min(Math.abs(goal - el.volume), dt * (goal > el.volume ? 0.6 : 0.35))));
+      if (target === 0 && el.volume === 0 && !el.paused) el.pause();
+    },
+  };
+})();
+
 const audio = {
   ctx: null, muted: false,
   init() { if (!this.ctx) { try { this.ctx = new AudioContext(); } catch {} } else if (this.ctx.state === 'suspended') this.ctx.resume(); },

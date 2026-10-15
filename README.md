@@ -156,10 +156,15 @@ server.js          HTTP + WebSocket server and the 60 Hz game loop
 shared/sim.js      Combat rules, body poses, 3D hit detection (used by server and browser)
 public/index.html  Start screen
 public/client.js   3D arena, knights, blood and flying limbs, HUD, sounds (all synthesized), input
+public/music/      Fight music: drop audio files here
 public/vendor/     Three.js 0.169 and its glow/post-processing add-ons (MIT licence)
 mac/               launchd file for running it as a background service on macOS
 legacy-2d/         The earlier side-view 2D version, kept for reference (not served)
 ```
+
+**Fight music.** Put music files (mp3, m4a, ogg, wav, aac, flac or webm) in `public/music/`. A track
+starts when each fight begins and fades out when the round ends; with several files, each fight picks
+a different one. No restart is needed: just refresh the page. **M** mutes music and sounds.
 
 **Graphics.** The game uses glow (bloom), moonlit reflections and a soft vignette. On a slow computer,
 add `?lowfx` to the end of the address to turn those effects off.

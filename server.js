@@ -13,18 +13,40 @@ const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const TICK = 1 / 60, SEND_EVERY = 2; // simulate at 60 Hz, broadcast at 30 Hz
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac', '.webm': 'audio/webm' };
+const MUSIC_DIR = path.join(ROOT, 'public', 'music');
+const isAudio = (f) => /\.(mp3|ogg|wav|m4a|aac|flac|webm)$/i.test(f);
 
 const server = http.createServer((req, res) => {
   let url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (url === '/') url = '/index.html';
+  // Fight music: every audio file dropped into public/music/ is listed here and picked at random each fight.
+  if (url === '/music.json') {
+    fs.readdir(MUSIC_DIR, (err, files) => {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+      res.end(JSON.stringify(err ? [] : files.filter(isAudio).sort().map((f) => '/music/' + encodeURIComponent(f))));
+    });
+    return;
+  }
   const base = url.startsWith('/shared/') ? ROOT : path.join(ROOT, 'public');
   const file = path.normalize(path.join(base, url));
   if (!file.startsWith(base)) { res.writeHead(403).end(); return; }
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404).end('not found'); return; }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(data);
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
+    const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    // Byte ranges let browsers (Safari especially) stream and loop music files.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (range && (range[1] || range[2])) {
+      let start = range[1] ? Number(range[1]) : Math.max(0, st.size - Number(range[2]));
+      let end = range[1] && range[2] ? Math.min(Number(range[2]), st.size - 1) : st.size - 1;
+      if (start >= st.size || start > end) { res.writeHead(416, { 'Content-Range': `bytes */${st.size}` }).end(); return; }
+      res.writeHead(206, { 'Content-Type': type, 'Content-Range': `bytes ${start}-${end}/${st.size}`, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1, 'Cache-Control': 'no-cache' });
+      fs.createReadStream(file, { start, end }).pipe(res);
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': type, 'Content-Length': st.size, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' });
+    fs.createReadStream(file).pipe(res);
   });
 });
 
