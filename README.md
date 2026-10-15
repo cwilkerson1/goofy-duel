@@ -1,7 +1,10 @@
 # ⚔️ Goofy Duel
 
-A silly first-person sword duel in a 3D arena, played in the browser, with Last Oasis-style
-directional combat. Arms, legs and heads come off, and the crowd loves it.
+A silly first-person sword duel in a haunted Halloween arena, played in the browser, with Last Oasis-style
+directional combat. Arms, legs and heads come off, and the crowd of monsters loves it.
+
+The arena is set on a full-moon night: jack-o'-lanterns on the pillars, tombstones along the wall,
+dead trees, ghosts drifting over the stands, bats overhead, and a wolf howl at the start of each round.
 
 - **Server:** one Node.js file, no `npm install` needed. It runs the fight itself (so nobody can cheat) and serves the game page. The 3D engine (Three.js) is bundled in `public/vendor/`, so it works without internet.
 - **Strictly 1v1, players only:** there are no bots. Open the page in any browser on your home network; the first two people in an arena fight each other. Anyone after that watches with a camera circling the fight, and the first watcher steps in if a fighter leaves.

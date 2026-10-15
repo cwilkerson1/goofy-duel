@@ -32,8 +32,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x86c1ff);
-scene.fog = new THREE.Fog(0x86c1ff, 30, 70);
+scene.background = new THREE.Color(0x1a1030);
+scene.fog = new THREE.Fog(0x2a1840, 26, 75);
 const camera = new THREE.PerspectiveCamera(78, 1, 0.03, 200);
 camera.rotation.order = 'YXZ';
 function resize() {
@@ -49,41 +49,62 @@ function canvasTexture(w, h, draw, repeat = [1, 1]) {
   return t;
 }
 
-// ---------- the arena ----------
+// ---------- the arena (Halloween night) ----------
 const crowd = { bodies: null, heads: null, base: [], cheer: 0 };
-const torches = [], torchLights = [];
+const torches = [], torchLights = [], ghosts = [], bats = [];
+// A carved pumpkin: orange ball with a glowing face painted on one side.
+const pumpkinFace = canvasTexture(256, 128, (g, w, h) => {
+  g.fillStyle = '#e8740c'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 8; i++) { g.fillStyle = 'rgba(120,50,0,0.35)'; g.fillRect((i / 8) * w, 0, 3, h); }
+  g.fillStyle = '#ffe14a';
+  const cx = w * 0.25; // this part of the texture lands on the sphere's +z side, which lookAt aims at the arena
+  const tri = (x, y, s) => { g.beginPath(); g.moveTo(x - s, y + s * 0.6); g.lineTo(x, y - s * 0.7); g.lineTo(x + s, y + s * 0.6); g.fill(); };
+  tri(cx - 14, 48, 9); tri(cx + 14, 48, 9); tri(cx, 64, 5);
+  g.beginPath(); g.moveTo(cx - 24, 76); g.lineTo(cx + 24, 76); g.lineTo(cx + 16, 92); g.lineTo(cx + 8, 86); g.lineTo(cx, 94); g.lineTo(cx - 8, 86); g.lineTo(cx - 16, 92); g.closePath(); g.fill();
+});
+pumpkinFace.wrapS = pumpkinFace.wrapT = THREE.ClampToEdgeWrapping; pumpkinFace.repeat.set(1, 1);
+function makePumpkin(size) {
+  const grp = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(size, 20, 14), new THREE.MeshStandardMaterial({ map: pumpkinFace, emissive: 0xff8a1a, emissiveMap: pumpkinFace, emissiveIntensity: 0.35, roughness: 0.8 }));
+  body.scale.y = 0.78; grp.add(body);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.12, size * 0.16, size * 0.4, 6), new THREE.MeshStandardMaterial({ color: 0x3f5a1c }));
+  stem.position.y = size * 0.85; grp.add(stem);
+  return grp;
+}
 function buildArena() {
-  scene.add(new THREE.HemisphereLight(0xdfefff, 0x8a6f4a, 1.1));
-  const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
-  sun.position.set(8, 18, 6); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 50 });
-  scene.add(sun);
+  scene.add(new THREE.HemisphereLight(0x8d84d6, 0x2a1b2e, 1.15));
+  const moon = new THREE.DirectionalLight(0xb9c8ff, 1.6);
+  moon.position.set(-14, 20, -10); moon.castShadow = true;
+  moon.shadow.mapSize.set(2048, 2048);
+  Object.assign(moon.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 60 });
+  scene.add(moon);
 
-  const sand = canvasTexture(512, 512, (g, w, h) => {
-    g.fillStyle = '#d9b77a'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${pick([120, 160, 250])},${pick([90, 120, 220])},60,${rnd(0.05, 0.18)})`; g.fillRect(rnd(0, w), rnd(0, h), rnd(1, 3), rnd(1, 3)); }
+  const dirt = canvasTexture(512, 512, (g, w, h) => {
+    g.fillStyle = '#6e5844'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${pick([30, 70, 110])},${pick([25, 60, 80])},${pick([20, 40, 60])},${rnd(0.08, 0.25)})`; g.fillRect(rnd(0, w), rnd(0, h), rnd(1, 3), rnd(1, 3)); }
+    for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(${pick([200, 160])},${pick([90, 60])},20,0.5)`; g.beginPath(); g.ellipse(rnd(0, w), rnd(0, h), 4, 2, rnd(0, 3), 0, 7); g.fill(); } // fallen leaves
   }, [6, 6]);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(ARENA_R + 0.3, 72), new THREE.MeshStandardMaterial({ map: sand, roughness: 1 }));
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(ARENA_R + 0.3, 72), new THREE.MeshStandardMaterial({ map: dirt, roughness: 1 }));
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-  // a painted duelling circle
-  const ring = new THREE.Mesh(new THREE.RingGeometry(2.9, 3.05, 64), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
+  // a glowing summoning circle instead of painted lines
+  const ring = new THREE.Mesh(new THREE.RingGeometry(2.9, 3.05, 64), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.55 }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.003; scene.add(ring);
 
   const bricks = canvasTexture(256, 128, (g, w, h) => {
-    g.fillStyle = '#7d7468'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#2f2a33'; g.fillRect(0, 0, w, h);
     for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++) {
-      g.fillStyle = `hsl(30, 8%, ${rnd(48, 62)}%)`;
+      g.fillStyle = `hsl(${pick([260, 270, 110])}, ${rnd(5, 14)}%, ${rnd(24, 34)}%)`;
       g.fillRect(col * 52 + (row % 2) * 26 - 26, row * 32 + 2, 48, 28);
     }
+    for (let i = 0; i < 30; i++) { g.fillStyle = 'rgba(70,110,40,0.35)'; g.fillRect(rnd(0, w), rnd(0, h), rnd(4, 14), rnd(2, 6)); } // moss
   }, [24, 2]);
   const wall = new THREE.Mesh(new THREE.CylinderGeometry(ARENA_R + 0.3, ARENA_R + 0.3, 2.2, 72, 1, true), new THREE.MeshStandardMaterial({ map: bricks, side: THREE.DoubleSide, roughness: 0.95 }));
   wall.position.y = 1.1; wall.receiveShadow = true; scene.add(wall);
-  const cap = new THREE.Mesh(new THREE.RingGeometry(ARENA_R + 0.3, ARENA_R + 0.8, 72), new THREE.MeshStandardMaterial({ color: 0x9a8f80, side: THREE.DoubleSide }));
+  const cap = new THREE.Mesh(new THREE.RingGeometry(ARENA_R + 0.3, ARENA_R + 0.8, 72), new THREE.MeshStandardMaterial({ color: 0x3b3440, side: THREE.DoubleSide }));
   cap.rotation.x = -Math.PI / 2; cap.position.y = 2.2; scene.add(cap);
 
-  // Tiered stands full of a cheering crowd.
-  const standMat = new THREE.MeshStandardMaterial({ color: 0x6b5a48, side: THREE.DoubleSide, roughness: 1 });
+  // Tiered stands full of cheering monsters.
+  const standMat = new THREE.MeshStandardMaterial({ color: 0x2e2530, side: THREE.DoubleSide, roughness: 1 });
   const seats = [];
   for (let i = 0; i < 4; i++) {
     const r0 = ARENA_R + 0.8 + i * 1.3, y = 2.2 + i * 0.75;
@@ -96,40 +117,119 @@ function buildArena() {
   const N = 420;
   crowd.bodies = new THREE.InstancedMesh(new THREE.BoxGeometry(0.42, 0.6, 0.3), new THREE.MeshStandardMaterial(), N);
   crowd.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.15, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffffff }), N);
-  const skin = [0xffe0bd, 0xf1c27d, 0xc68642, 0x8d5524, 0xffdbac];
+  // pumpkin heads, skeletons, zombies, ghosts, vampires, witches
+  const monsters = [[0xe8740c, 0x1b1b1b], [0xf2efe4, 0x2b2b2b], [0x7fae5a, 0x4a3a5a], [0xeaf2ff, 0xeaf2ff], [0xf3e6e6, 0x5a0f1c], [0x8fc46a, 0x2a1440]];
   for (let k = 0; k < N;) {
     const [r, y] = pick(seats), a = rnd(0, Math.PI * 2);
     if (Math.abs(Math.cos(a)) < 0.1) continue; // leave the space above the two gates empty
     crowd.base.push({ k, x: Math.cos(a) * r, z: Math.sin(a) * r, y, ph: rnd(0, 6.28), sp: rnd(4, 9) });
-    crowd.bodies.setColorAt(k, new THREE.Color().setHSL(Math.random(), 0.6, 0.5));
-    crowd.heads.setColorAt(k, new THREE.Color(pick(skin)));
+    const [head, body] = pick(monsters);
+    crowd.bodies.setColorAt(k, new THREE.Color(body));
+    crowd.heads.setColorAt(k, new THREE.Color(head));
     k++;
   }
   scene.add(crowd.bodies, crowd.heads);
 
-  // Pillars, torches and banners around the wall.
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0xa69c8c });
+  // Pillars topped with jack-o'-lanterns, and spooky banners.
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x4a4250 });
+  const bannerTex = canvasTexture(90, 150, (g, w, h) => {
+    g.fillStyle = '#3b1856'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ff7a1a'; g.fillRect(0, 0, w, 10); g.fillRect(0, h - 10, w, 10);
+    g.fillStyle = '#111'; g.font = '48px serif'; g.textAlign = 'center'; g.fillText('🦇', w / 2, h / 2 + 16);
+  });
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2 + Math.PI / 12, x = Math.cos(a) * (ARENA_R + 0.1), z = Math.sin(a) * (ARENA_R + 0.1);
     const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.6, 3.2, 0.6), pillarMat);
     pillar.position.set(x, 1.6, z); pillar.lookAt(0, 1.6, 0); pillar.castShadow = true; scene.add(pillar);
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 8), new THREE.MeshBasicMaterial({ color: 0xffa531 }));
-    flame.position.set(x * 0.965, 3.45, z * 0.965); scene.add(flame); torches.push(flame);
-    if (i % 3 === 0) { const l = new THREE.PointLight(0xffa531, 6, 9, 1.6); l.position.copy(flame.position); scene.add(l); torchLights.push(l); }
+    const jack = makePumpkin(0.28);
+    jack.position.set(x * 0.98, 3.42, z * 0.98); jack.lookAt(0, 3.42, 0); scene.add(jack); torches.push(jack.children[0]);
+    if (i % 3 === 0) { const l = new THREE.PointLight(0xff8a2a, 7, 10, 1.6); l.position.set(x * 0.93, 3.5, z * 0.93); scene.add(l); torchLights.push(l); }
     const b = (i / 12) * Math.PI * 2;
     if (Math.abs(Math.cos(b)) < 0.2) continue;
-    const banner = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.5), new THREE.MeshStandardMaterial({ color: TEAM[i % 2], side: THREE.DoubleSide }));
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.5), new THREE.MeshStandardMaterial({ map: bannerTex, side: THREE.DoubleSide }));
     banner.position.set(Math.cos(b) * (ARENA_R + 0.25), 1.35, Math.sin(b) * (ARENA_R + 0.25)); banner.lookAt(0, 1.35, 0); scene.add(banner);
   }
   // Gates where the fighters come out.
   for (const s of [1, -1]) {
-    const gate = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.6, 0.5), new THREE.MeshStandardMaterial({ color: 0x3a2a1a }));
+    const gate = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.6, 0.5), new THREE.MeshStandardMaterial({ color: 0x1a1218 }));
     gate.position.set(0, 1.3, s * (ARENA_R + 0.4)); scene.add(gate);
     const arch = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.5, 0.7), pillarMat);
     arch.position.set(0, 2.85, s * (ARENA_R + 0.4)); scene.add(arch);
   }
-  const sunBall = new THREE.Mesh(new THREE.SphereGeometry(4, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff3a0, fog: false }));
-  sunBall.position.set(40, 45, 30); scene.add(sunBall);
+
+  // Tombstones leaning against the wall, with the odd pumpkin.
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x8a8790, roughness: 1 });
+  const epitaphs = ['R.I.P.', 'Sir Lost-a-Leg', 'Should have blocked', 'Here lies a head', 'Fists. Again.', 'Hit by trout'];
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2 + rnd(-0.08, 0.08);
+    if (Math.abs(Math.cos(a)) < 0.2) continue; // keep the gates clear
+    const r = ARENA_R - 0.25, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (i % 3 === 1) { const p = makePumpkin(0.2); p.position.set(x, 0.16, z); p.lookAt(0, 0.16, 0); scene.add(p); continue; }
+    const words = canvasTexture(128, 160, (g, w, h) => {
+      g.fillStyle = '#8a8790'; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#3a3640'; g.font = 'bold 18px serif'; g.textAlign = 'center';
+      const text = epitaphs[i % epitaphs.length].split(' '); let line = '', ly = 60;
+      for (const word of text) { if (g.measureText(line + word).width > 100) { g.fillText(line, w / 2, ly); line = ''; ly += 22; } line += word + ' '; }
+      g.fillText(line, w / 2, ly);
+    });
+    words.wrapS = words.wrapT = THREE.ClampToEdgeWrapping;
+    const stone = new THREE.Group();
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.12), [stoneMat, stoneMat, stoneMat, stoneMat, new THREE.MeshStandardMaterial({ map: words, roughness: 1 }), stoneMat]);
+    slab.position.y = 0.32; stone.add(slab);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.12, 16, 1, false, 0, Math.PI), stoneMat);
+    top.rotation.set(Math.PI / 2, Math.PI / 2, 0); top.position.y = 0.65; stone.add(top);
+    stone.position.set(x, 0, z); stone.lookAt(0, 0, 0); stone.rotateZ(rnd(-0.15, 0.15)); stone.rotateX(rnd(-0.12, 0.05));
+    stone.traverse((o) => { o.castShadow = true; }); scene.add(stone);
+  }
+
+  // Dead trees peeking over the outer wall.
+  const barkMat = new THREE.MeshStandardMaterial({ color: 0x1c1418, roughness: 1 });
+  const branch = (parent, len, rad, depth) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.6, rad, len, 5), barkMat);
+    m.position.y = len / 2; const holder = new THREE.Group(); holder.add(m); parent.add(holder);
+    if (depth > 0) for (let k = 0; k < 2; k++) {
+      const joint = new THREE.Group(); joint.position.y = len * rnd(0.7, 1); joint.rotation.set(rnd(-0.9, 0.9), rnd(0, 6), rnd(-0.9, 0.9)); holder.add(joint);
+      branch(joint, len * 0.65, rad * 0.6, depth - 1);
+    }
+  };
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + 0.3, r = ARENA_R + rnd(8.5, 11), tree = new THREE.Group();
+    tree.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); branch(tree, rnd(4, 6), 0.35, 3); scene.add(tree);
+  }
+
+  // A big orange-tinged full moon and some stars.
+  const moonBall = new THREE.Mesh(new THREE.SphereGeometry(6, 32, 20), new THREE.MeshBasicMaterial({ color: 0xffe9b0, fog: false }));
+  moonBall.position.set(-55, 48, -40); scene.add(moonBall);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(9, 32, 20), new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, opacity: 0.12, fog: false }));
+  halo.position.copy(moonBall.position); scene.add(halo);
+  const starPos = [];
+  for (let i = 0; i < 700; i++) {
+    const th = rnd(0, Math.PI * 2), ph = rnd(0.12, 1.4), R = 150;
+    starPos.push(Math.cos(th) * Math.cos(ph) * R, Math.sin(ph) * R, Math.sin(th) * Math.cos(ph) * R);
+  }
+  const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, fog: false })));
+
+  // Ghosts drifting over the stands.
+  const ghostMat = new THREE.MeshStandardMaterial({ color: 0xeef4ff, emissive: 0x99aacc, emissiveIntensity: 0.5, transparent: true, opacity: 0.75 });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  for (let i = 0; i < 5; i++) {
+    const gst = new THREE.Group();
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), ghostMat); gst.add(head);
+    const sheet = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.55, 0.9, 16, 1, true), ghostMat); sheet.position.y = -0.45; gst.add(sheet);
+    for (const ex of [-0.13, 0.13]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), eyeMat); eye.position.set(ex, 0.12, 0.36); eye.scale.y = 1.6; gst.add(eye); }
+    const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), eyeMat); mouth.position.set(0, -0.1, 0.37); mouth.scale.y = 1.4; gst.add(mouth);
+    scene.add(gst); ghosts.push({ g: gst, a: rnd(0, 6.28), r: rnd(ARENA_R + 2, ARENA_R + 6), h: rnd(6, 9), sp: rnd(0.08, 0.16) * pick([1, -1]) });
+  }
+  // Bats flapping in circles above the arena.
+  const batMat = new THREE.MeshBasicMaterial({ color: 0x0c0a10, side: THREE.DoubleSide });
+  const wingGeo = new THREE.BufferGeometry(); wingGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0.45, 0.08, 0.05, 0.4, -0.05, -0.15, 0, 0, 0, 0.4, -0.05, -0.15, 0.08, -0.02, -0.2], 3));
+  for (let i = 0; i < 14; i++) {
+    const bat = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), batMat); body.scale.z = 1.6; bat.add(body);
+    const L = new THREE.Mesh(wingGeo, batMat), R = new THREE.Mesh(wingGeo, batMat); R.scale.x = -1; bat.add(L, R);
+    scene.add(bat); bats.push({ g: bat, L, R, a: rnd(0, 6.28), r: rnd(4, 14), h: rnd(7, 13), sp: rnd(0.4, 0.9) * pick([1, -1]), fl: rnd(0, 6) });
+  }
 }
 buildArena();
 
@@ -143,8 +243,19 @@ function updateCrowd(t, dt) {
     _m.compose(_p.set(c.x, y + 0.45, c.z), _q, _one); crowd.heads.setMatrixAt(c.k, _m);
   }
   crowd.bodies.instanceMatrix.needsUpdate = crowd.heads.instanceMatrix.needsUpdate = true;
-  for (const f of torches) f.scale.set(1, 0.8 + Math.random() * 0.5, 1);
-  for (const l of torchLights) l.intensity = 5 + Math.random() * 2;
+  for (const f of torches) f.material.emissiveIntensity = 0.3 + Math.random() * 0.35; // candles flicker inside the pumpkins
+  for (const l of torchLights) l.intensity = 6 + Math.random() * 2.5;
+  for (const o of ghosts) {
+    o.a += o.sp * dt * (1 + crowd.cheer * 2);
+    o.g.position.set(Math.cos(o.a) * o.r, o.h + Math.sin(t * 1.3 + o.r) * 0.4, Math.sin(o.a) * o.r);
+    o.g.rotation.y = -o.a + (o.sp > 0 ? 0 : Math.PI);
+  }
+  for (const b of bats) {
+    b.a += b.sp * dt;
+    b.g.position.set(Math.cos(b.a) * b.r, b.h + Math.sin(t * 2 + b.fl) * 0.5, Math.sin(b.a) * b.r);
+    b.g.rotation.y = -b.a + (b.sp > 0 ? Math.PI : 0);
+    const flap = Math.sin(t * 18 + b.fl) * 0.7; b.L.rotation.z = flap; b.R.rotation.z = -flap;
+  }
 }
 
 // ---------- knights ----------
@@ -538,7 +649,7 @@ function handleEvent(ev) {
     case 'jump': if (mine) audio.boing(1); break;
     case 'hop': audio.boing(1.6, mine ? 0.12 : 0.06); break;
     case 'roundEnd': audio.cheer(); crowd.cheer = 1; break;
-    case 'round': clearGibs(); blood.clearDecals(); bubbles.length = 0; myHeadGib = null; break;
+    case 'round': audio.howl(); clearGibs(); blood.clearDecals(); bubbles.length = 0; myHeadGib = null; break;
     case 'spin': wheel.start(ev); break;
   }
 }
@@ -845,6 +956,12 @@ const audio = {
     else if (id === 'trout') { const t = this.ctx.currentTime, n = this.noise(0.12), f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 900; n.connect(f); this.env(f, t, 0.002, 0.1, 0.5); n.start(t); }
     else if (id === 'hammer') { this.thud(); this.notes([[120, 0, 0.3, 60]], 'square', 0.1); }
     else this.thud();
+  },
+  howl() { // a distant wolf, for atmosphere
+    if (!this.ok()) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator(), v = this.ctx.createOscillator(), vg = this.ctx.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(380, t); o.frequency.linearRampToValueAtTime(720, t + 0.5); o.frequency.linearRampToValueAtTime(680, t + 1.6); o.frequency.linearRampToValueAtTime(420, t + 2.3);
+    v.frequency.value = 5.5; vg.gain.value = 12; v.connect(vg); vg.connect(o.frequency);
+    this.env(o, t, 0.4, 1.9, 0.05); o.start(t); v.start(t); o.stop(t + 2.4); v.stop(t + 2.4);
   },
   horn() {
     if (!this.ok()) return; const t = this.ctx.currentTime;
