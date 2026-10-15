@@ -120,6 +120,22 @@ they can win by bruising someone to death.
 **Practice one weapon:** `WEAPON=scythe npm start` makes the wheel always land on that weapon
 (use any id from `WEAPONS`, such as `trout` or `pan`).
 
+**Every weapon swings differently.** Each one has its own wind-up, swing speed, recovery,
+stamina cost and footwork, and the wheel tells you what you got (for example "quick wind-up · fast recovery"):
+
+| Weapon | Feel |
+|---|---|
+| Dagger, Fists | Very fast to wind up, swing and recover, cheap on stamina, nimble feet, but tiny reach |
+| Baguette, Chicken | Quick and light; the chicken's floppy swing takes a moment to arrive |
+| Longsword | The baseline |
+| Excalibur | Quicker than a longsword in every way |
+| Trout, Frying Pan | Close to the baseline; the pan's swing is snappy |
+| Spear | Quick jab with the longest reach, but slow to pull back |
+| Axe | Slow wind-up, then a fast chop, then a long recovery |
+| Hammer | The slowest wind-up; costs lots of stamina |
+| Scythe | Slow wind-up and a long, sweeping swing |
+| Greatsword | Slow at everything, heavy on stamina and slows your feet, but huge damage |
+
 Each weapon's numbers live in `WEAPONS` at the top of `shared/sim.js`: reach, damage, limb-severing,
 speed, knockback, daze and block cost, plus its slice size on the wheel.
 
@@ -140,9 +156,12 @@ server.js          HTTP + WebSocket server and the 60 Hz game loop
 shared/sim.js      Combat rules, body poses, 3D hit detection (used by server and browser)
 public/index.html  Start screen
 public/client.js   3D arena, knights, blood and flying limbs, HUD, sounds (all synthesized), input
-public/vendor/     Three.js 0.169 (MIT licence)
+public/vendor/     Three.js 0.169 and its glow/post-processing add-ons (MIT licence)
 mac/               launchd file for running it as a background service on macOS
 legacy-2d/         The earlier side-view 2D version, kept for reference (not served)
 ```
+
+**Graphics.** The game uses glow (bloom), moonlit reflections and a soft vignette. On a slow computer,
+add `?lowfx` to the end of the address to turn those effects off.
 
 Tuning knobs (timings in `T`, stamina costs in `COST`, damage and swing arcs in `SWING`, part health) are at the top of `shared/sim.js`.

@@ -28,23 +28,25 @@ export const T = {
 };
 // The weapon wheel. Every round each fighter gets one at random (weight = slice size).
 // len: blade reach in metres. dmg: overall damage. sever: extra damage to limbs and heads.
-// speed: multiplies every swing timing (lower is faster). knock: shove on hit (big = launch).
+// Swing feel (lower is faster): draw = wind-up, swing = how long the blade takes to cross,
+// rec = recovery after a swing or bounce. stam: stamina per swing/feint. move: footwork speed.
+// knock: shove on hit (big = launch).
 // (heads only get a third of the sever bonus, so big blades don't one-shot every neck.)
 // stun: dazes whoever gets hit. block: stamina cost multiplier when blocking with it.
 export const WEAPONS = {
-  longsword:  { name: 'Trusty Longsword',  emoji: '🗡️', len: 0.95, dmg: 1,    sever: 1,   speed: 1,    knock: 1,   stun: 0,    block: 1,   weight: 1.2, color: '#9fb4c7', line: 'Reliable. Boring. Effective.' },
-  greatsword: { name: 'Absurd Greatsword', emoji: '⚔️', len: 1.35, dmg: 1.35, sever: 1.2, speed: 1.3,  knock: 1.4, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Compensating for something?' },
-  dagger:     { name: 'Pointy Dagger',     emoji: '🔪', len: 0.45, dmg: 0.7,  sever: 0.8, speed: 0.62, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Get close. Get stabby.' },
-  axe:        { name: 'Limb Collector',    emoji: '🪓', len: 0.85, dmg: 1.15, sever: 1.7, speed: 1.15, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Arms? Legs? Yes.' },
-  hammer:     { name: 'Bonk Hammer',       emoji: '🔨', len: 0.9,  dmg: 1.2,  sever: 0.6, speed: 1.2,  knock: 2.2, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
-  spear:      { name: 'Very Long Stick',   emoji: '🔱', len: 1.6,  dmg: 0.9,  sever: 0.8, speed: 1.1,  knock: 1.2, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Personal space: enforced.' },
-  scythe:     { name: 'Grim Scythe',       emoji: '💀', len: 1.3,  dmg: 1.1,  sever: 1.8, speed: 1.25, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Harvest season.' },
-  chicken:    { name: 'Rubber Chicken',    emoji: '🐔', len: 0.7,  dmg: 0.5,  sever: 0.5, speed: 0.8,  knock: 4.5, stun: 0.3,  block: 1.2, weight: 1,   color: '#ffd23f', line: 'Low damage. Maximum disrespect.' },
-  baguette:   { name: 'Day-Old Baguette',  emoji: '🥖', len: 0.8,  dmg: 0.65, sever: 0.9, speed: 0.75, knock: 1.2, stun: 0,    block: 1.1, weight: 1,   color: '#d9a35b', line: 'Hard enough to hurt. Crumbs everywhere.' },
-  trout:      { name: 'Slappy Trout',      emoji: '🐟', len: 0.75, dmg: 0.75,  sever: 0.6, speed: 0.9,  knock: 2.6, stun: 0.2,  block: 1.2, weight: 1,   color: '#7fb3a6', line: 'The ancient art of the fish slap.' },
-  pan:        { name: 'Frying Pan',        emoji: '🍳', len: 0.55, dmg: 0.9,  sever: 0.5, speed: 0.9,  knock: 1.6, stun: 0.7,  block: 0.4, weight: 1,   color: '#333333', line: 'BONG. Also a great shield.' },
-  fists:      { name: 'Bare Fists',        emoji: '👊', len: 0.15, dmg: 0.5,  sever: 0.5, speed: 0.55, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'The wheel hates you.' },
-  excalibur:  { name: 'EXCALIBUR',         emoji: '✨', len: 1.1,  dmg: 1.6,  sever: 2,   speed: 0.85, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'JACKPOT! The legendary blade!' },
+  longsword:  { name: 'Trusty Longsword',  emoji: '🗡️', len: 0.95, dmg: 1,    sever: 1,   draw: 1, swing: 1, rec: 1, stam: 1, move: 1, knock: 1,   stun: 0,    block: 1,   weight: 1.2, color: '#9fb4c7', line: 'Reliable. Boring. Effective.' },
+  greatsword: { name: 'Absurd Greatsword', emoji: '⚔️', len: 1.35, dmg: 1.35, sever: 1.2, draw: 1.35, swing: 1.25, rec: 1.45, stam: 1.5, move: 0.85, knock: 1.4, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Compensating for something?' },
+  dagger:     { name: 'Pointy Dagger',     emoji: '🔪', len: 0.45, dmg: 0.7,  sever: 0.8, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Get close. Get stabby.' },
+  axe:        { name: 'Limb Collector',    emoji: '🪓', len: 0.85, dmg: 1.15, sever: 1.7, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Arms? Legs? Yes.' },
+  hammer:     { name: 'Bonk Hammer',       emoji: '🔨', len: 0.9,  dmg: 1.2,  sever: 0.6, draw: 1.4, swing: 1.1, rec: 1.2, stam: 1.35, move: 0.9, knock: 2.2, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
+  spear:      { name: 'Very Long Stick',   emoji: '🔱', len: 1.6,  dmg: 0.9,  sever: 0.8, draw: 0.85, swing: 0.85, rec: 1.3, stam: 0.9, move: 1, knock: 1.2, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Personal space: enforced.' },
+  scythe:     { name: 'Grim Scythe',       emoji: '💀', len: 1.3,  dmg: 1.1,  sever: 1.8, draw: 1.3, swing: 1.4, rec: 1.1, stam: 1.2, move: 0.9, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Harvest season.' },
+  chicken:    { name: 'Rubber Chicken',    emoji: '🐔', len: 0.7,  dmg: 0.5,  sever: 0.5, draw: 0.8, swing: 1.2, rec: 0.75, stam: 0.7, move: 1.05, knock: 4.5, stun: 0.3,  block: 1.2, weight: 1,   color: '#ffd23f', line: 'Low damage. Maximum disrespect.' },
+  baguette:   { name: 'Day-Old Baguette',  emoji: '🥖', len: 0.8,  dmg: 0.65, sever: 0.9, draw: 0.7, swing: 0.85, rec: 0.75, stam: 0.75, move: 1.05, knock: 1.2, stun: 0,    block: 1.1, weight: 1,   color: '#d9a35b', line: 'Hard enough to hurt. Crumbs everywhere.' },
+  trout:      { name: 'Slappy Trout',      emoji: '🐟', len: 0.75, dmg: 0.75,  sever: 0.6, draw: 0.95, swing: 1.1, rec: 0.9, stam: 0.85, move: 1, knock: 2.6, stun: 0.2,  block: 1.2, weight: 1,   color: '#7fb3a6', line: 'The ancient art of the fish slap.' },
+  pan:        { name: 'Frying Pan',        emoji: '🍳', len: 0.55, dmg: 0.9,  sever: 0.5, draw: 1.05, swing: 0.8, rec: 1, stam: 1, move: 1, knock: 1.6, stun: 0.7,  block: 0.4, weight: 1,   color: '#333333', line: 'BONG. Also a great shield.' },
+  fists:      { name: 'Bare Fists',        emoji: '👊', len: 0.15, dmg: 0.5,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'The wheel hates you.' },
+  excalibur:  { name: 'EXCALIBUR',         emoji: '✨', len: 1.1,  dmg: 1.6,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'JACKPOT! The legendary blade!' },
 };
 export const WHEEL = Object.keys(WEAPONS); // slice order around the wheel
 
@@ -80,7 +82,9 @@ export function rollWeapon() {
   return 'longsword';
 }
 export const wpn = (p) => WEAPONS[p.weapon] || WEAPONS.longsword;
-const tm = (p, k) => T[k] * wpn(p).speed; // weapon-scaled timing
+// Each timing scales with the matching part of the weapon's swing profile.
+const PHASE = { DRAW: 'draw', HEAVY_AT: 'draw', ACTIVE: 'swing', CHAMBER: 'swing', RECOVER: 'rec', BOUNCE: 'rec' };
+const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1); // weapon-scaled timing
 
 export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 15, feint: 6, jump: 6 };
 
@@ -350,7 +354,7 @@ function stepPlayer(room, p, dt) {
     if (p.state === 'hold') {
       if (DIRS.includes(p.input.d)) p.sdir = p.input.d;
       if (blockPressed) { // feint
-        p.state = 'idle'; p.cd = 0.15; spend(p, COST.feint);
+        p.state = 'idle'; p.cd = 0.15; spend(p, COST.feint * wpn(p).stam);
         room.events.push({ t: 'feint', id: p.id });
       } else {
         if (p.st >= T.MAX_HOLD) p.release = true;
@@ -358,7 +362,7 @@ function stepPlayer(room, p, dt) {
         if (p.release && p.st >= draw) {
           p.heavy = p.st >= tm(p, 'HEAVY_AT'); p.saim = p.pitch / D2R;
           p.state = 'active'; p.st = 0; p.hitDone = false; p.riposte = 0;
-          spend(p, p.heavy ? COST.heavy : COST.swing);
+          spend(p, (p.heavy ? COST.heavy : COST.swing) * wpn(p).stam);
           room.events.push({ t: 'swing', id: p.id, dir: p.sdir, heavy: p.heavy });
         }
       }
@@ -372,7 +376,7 @@ function stepPlayer(room, p, dt) {
     else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * dt);
 
     const legs = legsLeft(p);
-    let speed = legs === 2 ? 4 : legs === 1 ? 2.6 : 1.1;
+    let speed = (legs === 2 ? 4 : legs === 1 ? 2.6 : 1.1) * wpn(p).move;
     if (p.state === 'hold') speed *= isHeavy(p) ? 0.45 : 0.65;
     else if (p.state !== 'idle' || p.blocking) speed *= 0.5;
     if (p.stun > 0) speed = 0;
@@ -407,6 +411,7 @@ function facing(def, att) {
 }
 
 function resolveSwing(room, att, def) {
+  if (att.state !== 'active') att.lastSt = 0;
   if (att.dead || def.dead || att.hitDone) return;
   const ska = skeleton(att), skd = skeleton(def), shapes = partShapes(skd);
 
@@ -422,13 +427,19 @@ function resolveSwing(room, att, def) {
     return;
   }
   if (att.state !== 'active') return;
-  const zones = weaponZones(att, ska);
   const tilt = slashTilt(att, att.saim);
   const order = att.sdir === 'over' ? ['head', 'armR', 'armL', 'torso', 'legR', 'legL']
     : tilt < -15 ? ['legR', 'legL', 'armR', 'armL', 'torso', 'head'] : ['head', 'armR', 'armL', 'torso', 'legR', 'legL'];
   // Whichever zone connects decides the damage; when several do, the best one counts.
+  // Also check a few blade positions between last tick and this one, so quick swings can't skip past a target.
+  const stNow = att.st, stPrev = Math.min(att.lastSt || 0, stNow); att.lastSt = stNow;
   let touched = [], w = null;
-  for (const z of zones) { touched = touching(z, def, shapes, order); if (touched.length) { w = z; break; } }
+  for (let k = 1; k <= 4 && !w; k++) {
+    att.st = stPrev + ((stNow - stPrev) * k) / 4;
+    const sk = k === 4 ? ska : skeleton(att);
+    for (const z of weaponZones(att, sk)) { touched = touching(z, def, shapes, order); if (touched.length) { w = z; break; } }
+  }
+  att.st = stNow;
   if (!w) return;
   att.hitDone = true;
   const faces = facing(def, att);
