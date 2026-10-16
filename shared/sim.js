@@ -92,6 +92,8 @@ export const armsLeft = (p) => (p.parts.armR.cut ? 0 : 1) + (p.parts.armL.cut ? 
 export const oneHanding = (p) => !!wpn(p).two && armsLeft(p) < 2;
 const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1); // weapon-scaled timing
 
+// Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
+export const BLEED = { fresh: 1.2, trickle: 0.4, ease: 0.05 };
 export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 15, feint: 6, jump: 6 };
 
 // Directions name the side the weapon is drawn back on, from the attacker's point of view.
@@ -325,7 +327,7 @@ export function resetFighter(p, side) {
     x: 0, y: 0, z: side === 0 ? 4 : -4, vx: 0, vy: 0, vz: 0, yaw: side === 0 ? 0 : Math.PI, pitch: 0, onGround: true,
     parts: newParts(), state: 'idle', st: 0, release: false, heavy: false, hitDone: false, blocking: false,
     stun: 0, flinch: 0, cd: 0, riposte: 0, stam: STAM_MAX, stamWait: 0,
-    dead: false, deathT: 0, headless: false, bleed: 0, bruise: 0, color: side, panic: undefined,
+    dead: false, deathT: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, color: side, panic: undefined,
   });
   p.input.yaw = p.yaw; p.input.pitch = 0;
   p.spawnSeq = (p.spawnSeq || 0) + 1; // tells the client to snap its camera to the new spawn
@@ -379,7 +381,8 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
   if (partName === 'torso') return kill(room, def, 'gutted');
   const hadSword = swordArm(def) === partName;
   part.cut = true; part.hp = 0;
-  def.bleed += partName === 'head' ? 0 : 1.6;
+  // A fresh stump gushes at first, then slows to a trickle that never quite stops.
+  if (partName !== 'head') { def.bleed += BLEED.fresh; def.wounds = (def.wounds || 0) + 1; }
   const ra = rightOf(att.yaw), side = att.sdir === 'left' ? 1 : att.sdir === 'right' ? -1 : rand(-0.5, 0.5);
   room.events.push({
     t: 'sever', id: def.id, by: att.id, part: partName, pos: at, sword: hadSword, weapon: def.weapon, color: def.color,
@@ -448,7 +451,7 @@ function stepPlayer(room, p, dt) {
       p.vy = 2.6; p.onGround = false; // one leg left: hop everywhere
       room.events.push({ t: 'hop', id: p.id });
     }
-    if (p.bleed) p.parts.torso.hp -= p.bleed * dt;
+    if (p.bleed) { p.bleed = Math.max((p.wounds || 0) * BLEED.trickle, p.bleed - BLEED.ease * dt); p.parts.torso.hp -= p.bleed * dt; }
     if (p.bruise) p.parts.torso.hp -= p.bruise * dt; // internal bruising from blunt hits
     if (p.parts.torso.hp <= 0) { p.parts.torso.hp = 0; kill(room, p, p.bleed >= (p.bruise || 0) ? 'bled out' : 'bruised to death'); }
   }
