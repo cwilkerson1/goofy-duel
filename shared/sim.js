@@ -30,17 +30,19 @@ export const T = {
 // len: blade reach in metres. dmg: overall damage. sever: extra damage to limbs and heads.
 // Swing feel (lower is faster): draw = wind-up, swing = how long the blade takes to cross,
 // rec = recovery after a swing or bounce. stam: stamina per swing/feint. move: footwork speed.
+// two: a two-handed weapon (the big ones): both hands on the grip, slower, hits harder. grip: how far
+// down the handle the second hand sits. Swung with one arm left, it's slower still and hits softer.
 // knock: shove on hit (big = launch).
 // (heads only get a third of the sever bonus, so big blades don't one-shot every neck.)
 // stun: dazes whoever gets hit. block: stamina cost multiplier when blocking with it.
 export const WEAPONS = {
   longsword:  { name: 'Trusty Longsword',  emoji: '🗡️', len: 0.95, dmg: 1,    sever: 1,   draw: 1, swing: 1, rec: 1, stam: 1, move: 1, knock: 1,   stun: 0,    block: 1,   weight: 1.2, color: '#9fb4c7', line: 'Reliable. Boring. Effective.' },
-  greatsword: { name: 'Absurd Greatsword', emoji: '⚔️', len: 1.35, dmg: 1.35, sever: 1.2, draw: 1.35, swing: 1.25, rec: 1.45, stam: 1.5, move: 0.85, knock: 1.4, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Compensating for something?' },
+  greatsword: { name: 'Absurd Greatsword', emoji: '⚔️', len: 1.35, dmg: 1.6, sever: 1.2, draw: 1.45, swing: 1.45, rec: 1.45, stam: 1.5, move: 0.85, two: true, grip: 0.17, knock: 1.7, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Compensating for something?' },
   dagger:     { name: 'Pointy Dagger',     emoji: '🔪', len: 0.45, dmg: 0.7,  sever: 0.8, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Get close. Get stabby.' },
   axe:        { name: 'Limb Collector',    emoji: '🪓', len: 0.85, dmg: 1.15, sever: 1.7, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Arms? Legs? Yes.' },
-  hammer:     { name: 'Bonk Hammer',       emoji: '🔨', len: 0.9,  dmg: 1.2,  sever: 0.6, draw: 1.4, swing: 1.1, rec: 1.2, stam: 1.35, move: 0.9, knock: 2.2, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
-  spear:      { name: 'Very Long Stick',   emoji: '🔱', len: 1.6,  dmg: 0.9,  sever: 0.8, draw: 0.85, swing: 0.85, rec: 1.3, stam: 0.9, move: 1, knock: 1.2, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Personal space: enforced.' },
-  scythe:     { name: 'Grim Scythe',       emoji: '💀', len: 1.3,  dmg: 1.1,  sever: 1.8, draw: 1.3, swing: 1.4, rec: 1.1, stam: 1.2, move: 0.9, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Harvest season.' },
+  hammer:     { name: 'Bonk Hammer',       emoji: '🔨', len: 0.9,  dmg: 1.45,  sever: 0.6, draw: 1.5, swing: 1.35, rec: 1.2, stam: 1.35, move: 0.9, two: true, grip: 0.3, knock: 2.6, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
+  spear:      { name: 'Very Long Stick',   emoji: '🔱', len: 1.6,  dmg: 1.1,  sever: 0.8, draw: 1.0, swing: 1.05, rec: 1.3, stam: 0.9, move: 1, two: true, grip: 0.4, knock: 1.4, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Personal space: enforced.' },
+  scythe:     { name: 'Grim Scythe',       emoji: '💀', len: 1.3,  dmg: 1.3,  sever: 1.8, draw: 1.4, swing: 1.55, rec: 1.1, stam: 1.2, move: 0.9, two: true, grip: 0.4, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Harvest season.' },
   chicken:    { name: 'Rubber Chicken',    emoji: '🐔', len: 0.7,  dmg: 0.5,  sever: 0.5, draw: 0.8, swing: 1.2, rec: 0.75, stam: 0.7, move: 1.05, knock: 4.5, stun: 0.3,  block: 1.2, weight: 1,   color: '#ffd23f', line: 'Low damage. Maximum disrespect.' },
   baguette:   { name: 'Day-Old Baguette',  emoji: '🥖', len: 0.8,  dmg: 0.65, sever: 0.9, draw: 0.7, swing: 0.85, rec: 0.75, stam: 0.75, move: 1.05, knock: 1.2, stun: 0,    block: 1.1, weight: 1,   color: '#d9a35b', line: 'Hard enough to hurt. Crumbs everywhere.' },
   trout:      { name: 'Slappy Trout',      emoji: '🐟', len: 0.75, dmg: 0.75,  sever: 0.6, draw: 0.95, swing: 1.1, rec: 0.9, stam: 0.85, move: 1, knock: 2.6, stun: 0.2,  block: 1.2, weight: 1,   color: '#7fb3a6', line: 'The ancient art of the fish slap.' },
@@ -84,7 +86,10 @@ export function rollWeapon() {
 export const wpn = (p) => WEAPONS[p.weapon] || WEAPONS.longsword;
 // Each timing scales with the matching part of the weapon's swing profile.
 const PHASE = { DRAW: 'draw', HEAVY_AT: 'draw', ACTIVE: 'swing', CHAMBER: 'swing', RECOVER: 'rec', BOUNCE: 'rec' };
-const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1); // weapon-scaled timing
+export const armsLeft = (p) => (p.parts.armR.cut ? 0 : 1) + (p.parts.armL.cut ? 0 : 1);
+// A two-hander with only one arm left to swing it.
+export const oneHanding = (p) => !!wpn(p).two && armsLeft(p) < 2;
+const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1); // weapon-scaled timing
 
 export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 15, feint: 6, jump: 6 };
 
@@ -198,7 +203,9 @@ export function skeleton(p) {
   const fl = Math.sin(p.walk * 1.3 + 1) * 0.25 + (p.stun > 0 ? Math.sin(p.stun * 30) * 0.4 : 0);
   const freeHand = (side) => L(neck, 0.15 + fl, side * 0.32, -0.55 + Math.abs(fl) * 0.3);
   const handR = holder === 'armR' ? hand : freeHand(1);
-  const handL = holder === 'armL' ? hand : freeHand(-1);
+  // Two-handed weapons: the left hand grips further down the handle.
+  const g = wpn(p).grip || 0, twoHands = holder === 'armR' && wpn(p).two && !p.parts.armL.cut && !p.dead;
+  const handL = holder === 'armL' ? hand : twoHands ? [hand[0] - wdir[0] * g, hand[1] - wdir[1] * g, hand[2] - wdir[2] * g] : freeHand(-1);
   return { wdir: holder ? wdir : null, wedge: holder ? wedge : null, hip, hipR, hipL, neck, head, shR, shL, footR, footL: footL2, kneeR: knee(hipR, footR), kneeL: knee(hipL, footL2), handR, handL, hand, tip, f, r };
 }
 
@@ -472,7 +479,7 @@ function resolveSwing(room, att, def) {
   const n = [def.x - att.x, def.z - att.z], nl = Math.hypot(...n) || 1;
   const closing = ((att.vx - def.vx) * n[0] + (att.vz - def.vz) * n[1]) / nl;
   const W = wpn(att);
-  const dmg = rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35);
+  const dmg = rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * (oneHanding(att) ? 0.7 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35);
   damage(room, att, def, part, dmg, skd, w);
 }
 

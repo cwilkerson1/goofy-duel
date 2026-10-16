@@ -17,6 +17,24 @@
   #lobby button { margin-top: 18px; width: 100%; font: inherit; font-size: 20px; padding: 12px; border: 0; border-radius: 10px; background: #e8740c; color: #fff; cursor: pointer; }
   #lobby button:hover { background: #ff8a2a; }
   #lobby .keys { margin-top: 16px; font-size: 13px; color: #a99fc4; line-height: 1.6; }
+  #lobby .ghost { background: transparent; border: 2px solid #4a3d6b; font-size: 16px; padding: 9px; margin-top: 10px; }
+  #lobby .ghost:hover { background: #3a3054; }
+  #menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #0d0a16cc; z-index: 3; }
+  #menu.open { display: flex; }
+  #menu .panel { background: #2c2440; border-radius: 14px; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 10px 40px #000a; padding: 22px 26px; box-sizing: border-box; }
+  #menu h2 { margin: 0 0 6px; font-size: 26px; }
+  #menu h3 { margin: 18px 0 6px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: #ff9a3c; }
+  #menu .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 0; border-bottom: 1px solid #3a3054; font-size: 15px; }
+  #menu .row label { flex: 1; color: #e6def5; }
+  #menu select { font: inherit; font-size: 14px; background: #1b1626; color: #fff; border: 2px solid #4a3d6b; border-radius: 8px; padding: 5px 8px; min-width: 150px; }
+  #menu input[type=checkbox] { width: 20px; height: 20px; accent-color: #e8740c; }
+  #menu input[type=range] { width: 150px; accent-color: #e8740c; }
+  #menu .val { width: 46px; text-align: right; color: #c9bfe0; font-size: 13px; }
+  #menu .note { font-size: 12px; color: #a99fc4; margin: 6px 0 0; }
+  #menu .buttons { display: flex; gap: 10px; margin-top: 18px; }
+  #menu button { flex: 1; font: inherit; font-size: 17px; padding: 11px; border: 0; border-radius: 10px; background: #e8740c; color: #fff; cursor: pointer; }
+  #menu button.ghost { background: transparent; border: 2px solid #4a3d6b; }
+  #menu button:hover { filter: brightness(1.1); }
   kbd { background: #1b1626; border: 1px solid #4a3d6b; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.min.js", "three/addons/": "/vendor/addons/" } }</script>
@@ -33,14 +51,21 @@
     <label for="room">Arena (share this with your opponent)</label>
     <input id="room" maxlength="24" value="main" autocomplete="off">
     <button id="go">Enter the arena</button>
+    <button id="gear" class="ghost">⚙ Settings</button>
     <div class="keys">
       <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> jump · mouse looks<br>
       Move the mouse <b>left, right or up</b> to pick a side. <b>Hold left click</b> to draw back, steer, <b>release</b> to swing. Hold longer for a <b>heavy</b>.<br>
       Hold <b>right click</b> and steer toward the incoming blade to block (no hints: watch their weapon). Right click while drawing back to <b>feint</b>.<br>
-      <kbd>F</kbd> kick (unblockable) · <kbd>M</kbd> mute · <kbd>G</kbd> graphics quality
+      <kbd>F</kbd> kick (unblockable) · <kbd>M</kbd> mute · <kbd>Esc</kbd> settings
     </div>
   </div>
 </div>
+<div id="menu"><div class="panel">
+  <h2>⚙ Settings</h2>
+  <div id="menuRows"></div>
+  <p class="note" id="aaNote"></p>
+  <div class="buttons"><button id="menuClose">Back to the fight</button></div>
+</div></div>
 <script type="module" src="/client.js"></script>
 </body>
 </html>

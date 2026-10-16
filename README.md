@@ -59,7 +59,8 @@ mouse (press **Esc** to let go).
 | Feint | Right click while drawing back cancels the attack. Or switch sides just before you release. |
 | Kick | **F** (or a side mouse button). Kicks can't be blocked, they knock the target back and cancel what they were doing, and they're short range. |
 | Mute | **M** |
-| Graphics quality (Low / Medium / High) | **G** |
+| Settings menu (graphics, mouse, volume) | **Esc** (or ⚙ Settings on the start screen) |
+| Cycle graphics preset (Low / Medium / High) | **G** |
 
 **Reading attacks.** There are no hints. Watch where their weapon is drawn back to: a swing drawn on
 *their* right arrives on *your* left. The only glow is white, when their attack has become a heavy.
@@ -89,12 +90,12 @@ opponent's are revealed when it stops, and the fight begins.
 | Weapon | What it's like |
 |---|---|
 | 🗡️ Trusty Longsword | The baseline. Reliable. Boring. Effective. |
-| ⚔️ Absurd Greatsword | Huge reach and damage, slow, cheap to block with |
+| ⚔️ Absurd Greatsword | Two-handed. Huge reach and damage, slow, cheap to block with |
 | 🔪 Pointy Dagger | Very fast, very short, weak blocks |
 | 🪓 Limb Collector | An axe that is very good at taking arms and legs off |
-| 🔨 Bonk Hammer | Every hit dazes and shoves; bad at severing |
-| 🔱 Very Long Stick | A spear with the longest reach in the game |
-| 💀 Grim Scythe | Long, slow, and the best limb remover after Excalibur |
+| 🔨 Bonk Hammer | Two-handed. Every hit dazes and shoves; bad at severing |
+| 🔱 Very Long Stick | Two-handed. A spear with the longest reach in the game |
+| 💀 Grim Scythe | Two-handed. Long, slow, and the best limb remover after Excalibur |
 | 🐔 Rubber Chicken | Barely hurts, squeaks, and launches people across the arena |
 | 🥖 Day-Old Baguette | Quick and weak, sprays crumbs |
 | 🐟 Slappy Trout | A wet slap that knocks people flying |
@@ -122,6 +123,10 @@ they can win by bruising someone to death.
 
 **Practice one weapon:** `WEAPON=scythe npm start` makes the wheel always land on that weapon
 (use any id from `WEAPONS`, such as `trout` or `pan`).
+
+**Two-handed weapons.** The big ones (greatsword, hammer, spear and scythe) are held with both hands.
+They swing slower than one-handed weapons but hit about 20% harder. Lose an arm while holding one and
+you swing it one-handed: slower still, and 30% weaker.
 
 **Every weapon swings differently.** Each one has its own wind-up, swing speed, recovery,
 stamina cost and footwork, and the wheel tells you what you got (for example "quick wind-up · fast recovery"):
@@ -173,9 +178,12 @@ a different one. No restart is needed: just refresh the page. **M** mutes music 
 **Graphics.** The knights wear great helms, mail and team-coloured surcoats, and fight in a moonlit stone
 arena. All textures (stone, earth, wood, mail, steel, cloth) are generated in code when the page loads,
 so there are no image files to download. On top of that there's ambient occlusion (soft contact shadows),
-glow, reflections and a vignette. There are three graphics levels: **Low**, **Medium** (the default) and **High** (adds ambient
-occlusion and full Retina resolution). Press **G** in game to switch; your choice is remembered on that
-computer. If the game runs slowly, it drops a level by itself until you pick one. Adding `?lowfx` to the
+glow, reflections and a vignette. Press **Esc** in game (or **⚙ Settings** on the start screen) for the settings menu:
+a quality preset (**Low**, **Medium**, the default, or **High**), and each graphics option on its own
+(resolution, shadows, anti-aliasing, glow, ambient occlusion, vignette, pumpkin lights, mist and ghosts),
+plus mouse sensitivity, field of view, music and sound volume, and a frame-rate counter. Everything is
+remembered on that computer. **G** cycles the presets. If the game runs slowly it drops a preset by
+itself, until you change a graphics setting yourself (or untick that option). Adding `?lowfx` to the
 address forces Low.
 
 **Smooth over Wi-Fi.** Your own knight moves the instant you press a key and quietly lines up with

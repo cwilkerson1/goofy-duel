@@ -20,6 +20,26 @@ const GOOFY = ['Sir Flops-a-Lot', 'Lady Stabsworth', 'Duke Nubbin', 'Earl of Ouc
 const $ = (id) => document.getElementById(id);
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const params = new URLSearchParams(location.search);
+
+// ---------- settings ----------
+// Everything in the settings menu, remembered on this computer. The three graphics presets fill in the
+// graphics options; changing any one of them by hand makes it "Custom".
+const PRESETS = {
+  Low: { scale: 0.75, shadows: 1, aa: 0, bloom: false, ao: false, vignette: false, lights: true, atmosphere: true },
+  Medium: { scale: 1, shadows: 2, aa: 2, bloom: true, ao: false, vignette: true, lights: true, atmosphere: true },
+  High: { scale: 2, shadows: 3, aa: 4, bloom: true, ao: true, vignette: true, lights: true, atmosphere: true },
+};
+const GFX_KEYS = Object.keys(PRESETS.Low);
+const S = (() => {
+  const d = { preset: 'Medium', ...PRESETS.Medium, auto: true, fps: false, fov: 78, sens: 1, music: 70, sfx: 80 };
+  let saved = null;
+  try { saved = JSON.parse(store.get('duel.settings')); } catch {}
+  if (saved && typeof saved === 'object') for (const k of Object.keys(d)) { if (typeof saved[k] === typeof d[k]) d[k] = saved[k]; }
+  else if (store.get('duel.quality') !== null) { d.preset = ['Low', 'Medium', 'High'][Number(store.get('duel.quality'))] || 'Medium'; Object.assign(d, PRESETS[d.preset]); d.auto = false; }
+  if (params.has('lowfx')) { d.preset = 'Low'; Object.assign(d, PRESETS.Low); d.auto = false; }
+  return d;
+})();
+const saveSettings = () => store.set('duel.settings', JSON.stringify(S));
 $('name').value = store.get('duel.name') || pick(GOOFY);
 $('room').value = params.get('room') || store.get('duel.room') || 'main';
 let joined = false;
@@ -35,14 +55,14 @@ $('name').addEventListener('keydown', (e) => e.key === 'Enter' && $('go').click(
 
 // ---------- renderer & scene ----------
 const glCanvas = $('gl'), hud = $('hud'), hctx = hud.getContext('2d');
-const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: S.aa > 0 });
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0820);
 scene.fog = new THREE.FogExp2(0x231a36, 0.02);
-const camera = new THREE.PerspectiveCamera(78, 1, 0.03, 200);
+const camera = new THREE.PerspectiveCamera(S.fov, 1, 0.03, 200);
 camera.rotation.order = 'YXZ';
 // Post-processing: glow on bright things (bloom), then a soft dark vignette and a slight colour grade.
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 }));
@@ -69,40 +89,44 @@ const grade = new ShaderPass({
 });
 composer.addPass(grade);
 composer.addPass(new OutputPass());
-// Graphics quality. Low: no screen effects, lower resolution. Medium (default): glow and vignette at
-// normal resolution. High: adds ambient occlusion and full Retina resolution. G cycles through them
-// (remembered on this computer), and if frames get slow the game steps down by itself. ?lowfx forces Low.
-const QUALITY = ['Low', 'Medium', 'High'];
-let quality = params.has('lowfx') ? 0 : Math.max(0, Math.min(2, Number(store.get('duel.quality') ?? 1) || 0));
-let qualityPicked = params.has('lowfx') || store.get('duel.quality') !== null, qualityToast = 0, moonLight = null;
-function applyQuality() {
-  renderer.setPixelRatio(quality === 2 ? Math.min(devicePixelRatio, 2) : quality === 1 ? 1 : 0.8);
-  gtao.enabled = quality === 2; bloom.enabled = quality >= 1;
-  // Fewer anti-aliasing samples on Medium; these multi-sample buffers are expensive on laptop GPUs.
-  for (const rt of [composer.renderTarget1, composer.renderTarget2]) { const n = quality === 2 ? 4 : 2; if (rt.samples !== n) { rt.samples = n; rt.dispose(); } }
+// Apply the graphics settings. Screen effects (glow, ambient occlusion, vignette) need the extra
+// post-processing passes; with all of them off the scene is drawn straight to the screen, which is fastest.
+let qualityToast = 0, toastText = '', moonLight = null;
+const useComposer = () => S.bloom || S.ao || S.vignette;
+function applySettings() {
+  renderer.setPixelRatio(S.scale >= 2 ? Math.min(devicePixelRatio, 2) : S.scale);
+  gtao.enabled = S.ao; bloom.enabled = S.bloom; grade.enabled = S.vignette;
+  for (const rt of [composer.renderTarget1, composer.renderTarget2]) if (rt.samples !== S.aa) { rt.samples = S.aa; rt.dispose(); }
   if (moonLight) {
-    const size = [512, 1024, 2048][quality];
+    moonLight.castShadow = S.shadows > 0;
+    const size = [512, 512, 1024, 2048][S.shadows];
     if (moonLight.shadow.mapSize.x !== size) { moonLight.shadow.mapSize.set(size, size); moonLight.shadow.map?.dispose(); moonLight.shadow.map = null; }
   }
+  for (const l of torchLights) l.visible = S.lights;
+  for (const o of [...mists.map((x) => x.m), ...ghosts.map((x) => x.g), ...bats.map((x) => x.g)]) o.visible = S.atmosphere;
+  camera.fov = S.fov;
   resize();
 }
-function setQuality(q, manual) {
-  quality = (q + 3) % 3; qualityToast = 3; applyQuality();
-  if (manual) { qualityPicked = true; store.set('duel.quality', quality); }
+function setPreset(name, why) {
+  S.preset = name; Object.assign(S, PRESETS[name]); saveSettings(); applySettings(); menu.refresh();
+  toastText = `Graphics: ${name}${why ? ` (${why})` : '  (G or Esc to change)'}`; qualityToast = 3;
 }
-// Watch the frame rate for a few seconds at a time; if it's poor, drop a level (unless the player chose one).
-const perf = { t: 0, n: 0 };
+// Watch the frame rate for a few seconds at a time; if it's poor and auto is on, drop a preset.
+const perf = { t: 0, n: 0, fps: 0, ft: 0, fn: 0 };
 function watchFrameRate(dt) {
-  if (qualityPicked || quality === 0 || dt <= 0) return;
+  if (dt <= 0) return;
+  perf.ft += dt; perf.fn++;
+  if (perf.ft >= 0.5) { perf.fps = Math.round(perf.fn / perf.ft); perf.ft = 0; perf.fn = 0; }
+  if (!S.auto || S.preset === 'Low' || document.hidden) { perf.t = 0; perf.n = 0; return; }
   perf.t += dt; perf.n++;
-  if (perf.t >= 3) { if (perf.n / perf.t < 45) setQuality(quality - 1, false); perf.t = 0; perf.n = 0; }
+  if (perf.t >= 3) { if (perf.n / perf.t < 45) setPreset(S.preset === 'High' ? 'Medium' : 'Low', 'lowered to keep it smooth'); perf.t = 0; perf.n = 0; }
 }
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
   hud.width = w * devicePixelRatio; hud.height = h * devicePixelRatio;
 }
-addEventListener('resize', resize); applyQuality();
+addEventListener('resize', resize);
 
 function canvasTexture(w, h, draw, repeat = [1, 1]) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
@@ -271,7 +295,6 @@ function buildArena() {
   scene.add(new THREE.HemisphereLight(0x8d84d6, 0x2a1b2e, 0.9));
   const moon = moonLight = new THREE.DirectionalLight(0xb9c8ff, 1.6);
   moon.position.set(-14, 20, -10); moon.castShadow = true;
-  moon.shadow.mapSize.set(...[[512, 512], [1024, 1024], [2048, 2048]][quality]);
   Object.assign(moon.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 60 });
   scene.add(moon);
 
@@ -463,6 +486,7 @@ function buildArena() {
   }
 }
 buildArena();
+applySettings();
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1), _p = new THREE.Vector3(), _yAxis = new THREE.Vector3(0, 1, 0);
 function updateCrowd(t, dt) {
@@ -544,10 +568,10 @@ function makeWeapon(id) {
     case 'greatsword': glow = steel(); add(blade(0.075, L, 0.012), glow, 0.03); add(guard(0.32), MAT.steel, 0.01); add(cyl(0.022, 0.3), MAT.grip, -0.15); add(new THREE.SphereGeometry(0.04, 12, 8), MAT.steel, -0.31); break;
     case 'dagger': glow = steel(); add(blade(0.045, L, 0.007, 0.3), glow, 0.02); add(guard(0.1), MAT.brass, 0.01); grip(); break;
     case 'axe': glow = steel(); add(cyl(0.022, L + 0.2), MAT.wood, L / 2 - 0.1); add(box(0.24, 0.2, 0.025), glow, L - 0.1, 0.12); break;
-    case 'hammer': glow = std(0x777777, { metalness: 0.6 }); add(cyl(0.024, L + 0.15), MAT.wood, L / 2 - 0.08); add(box(0.3, 0.15, 0.15), glow, L - 0.08); break;
-    case 'spear': glow = steel(); add(cyl(0.02, L), MAT.wood, L / 2 - 0.1); add(new THREE.ConeGeometry(0.045, 0.26, 6), glow, L - 0.02); break;
+    case 'hammer': glow = std(0x777777, { metalness: 0.6 }); add(cyl(0.024, L + 0.35), MAT.wood, L / 2 - 0.18); add(box(0.3, 0.15, 0.15), glow, L - 0.08); break;
+    case 'spear': glow = steel(); add(cyl(0.02, L + 0.4), MAT.wood, L / 2 - 0.3); add(new THREE.ConeGeometry(0.045, 0.26, 6), glow, L - 0.02); break;
     case 'scythe': {
-      glow = std(0xbfc6cc, { metalness: 0.8, roughness: 0.3 }); add(cyl(0.022, L + 0.2), std(0x3a2a1a), L / 2 - 0.1);
+      glow = std(0xbfc6cc, { metalness: 0.8, roughness: 0.3 }); add(cyl(0.022, L + 0.5), std(0x3a2a1a), L / 2 - 0.25);
       const b = add(box(0.55, 0.06, 0.012), glow, L - 0.05, 0.26); b.rotation.z = -0.25; break;
     }
     case 'chicken': {
@@ -789,6 +813,66 @@ function stepGibs(dt) {
 }
 function clearGibs() { for (const b of gibs) scene.remove(b.g); gibs.length = 0; }
 
+// ---------- settings menu ----------
+// Opens from the start screen's Settings button, or with Esc during a fight (Esc frees the mouse,
+// and the menu appears). "Back to the fight" grabs the mouse again.
+const MENU = [
+  ['Graphics'],
+  ['preset', 'Quality preset', 'select', [['Low', 'Low (fastest)'], ['Medium', 'Medium'], ['High', 'High (prettiest)'], ['Custom', 'Custom']]],
+  ['scale', 'Resolution', 'select', [[0.5, '50% (fastest)'], [0.75, '75%'], [1, '100%'], [2, 'Sharp (Retina)']]],
+  ['shadows', 'Shadows', 'select', [[0, 'Off'], [1, 'Low'], [2, 'Medium'], [3, 'High']]],
+  ['aa', 'Anti-aliasing (smooth edges)', 'select', [[0, 'Off'], [2, '2×'], [4, '4×']]],
+  ['bloom', 'Glow', 'check'],
+  ['ao', 'Ambient occlusion (soft contact shadows)', 'check'],
+  ['vignette', 'Vignette and red hurt flash', 'check'],
+  ['lights', 'Pumpkin lights', 'check'],
+  ['atmosphere', 'Mist, ghosts and bats', 'check'],
+  ['auto', 'Lower graphics by itself if the game runs slowly', 'check'],
+  ['fps', 'Show frame rate', 'check'],
+  ['Controls'],
+  ['sens', 'Mouse sensitivity', 'range', [0.2, 3, 0.05, '×']],
+  ['fov', 'Field of view', 'range', [60, 110, 1, '°']],
+  ['Sound'],
+  ['music', 'Music volume', 'range', [0, 100, 1, '%']],
+  ['sfx', 'Sound effects volume', 'range', [0, 100, 1, '%']],
+];
+const menu = (() => {
+  const root = $('menu'), rows = $('menuRows'), inputs = {}, startAA = S.aa > 0;
+  for (const [key, label, kind, opt] of MENU) {
+    if (!label) { const h = document.createElement('h3'); h.textContent = key; rows.append(h); continue; }
+    const row = document.createElement('div'); row.className = 'row';
+    const lab = document.createElement('label'); lab.textContent = label; lab.htmlFor = 'set-' + key; row.append(lab);
+    let el, val = null;
+    if (kind === 'select') { el = document.createElement('select'); for (const [v, t] of opt) el.add(new Option(t, String(v))); }
+    else if (kind === 'check') { el = document.createElement('input'); el.type = 'checkbox'; }
+    else { el = document.createElement('input'); el.type = 'range'; [el.min, el.max, el.step] = opt; val = document.createElement('span'); val.className = 'val'; }
+    el.id = 'set-' + key; row.append(el); if (val) row.append(val);
+    inputs[key] = { el, kind, val, unit: opt && opt[3] };
+    el.addEventListener(kind === 'range' ? 'input' : 'change', () => {
+      const v = kind === 'check' ? el.checked : kind === 'select' && key === 'preset' ? el.value : Number(el.value);
+      if (key === 'preset') { if (v !== 'Custom') { S.auto = false; setPreset(v); } return; }
+      S[key] = v;
+      if (GFX_KEYS.includes(key)) { S.auto = false; S.preset = Object.keys(PRESETS).find((n) => GFX_KEYS.every((k) => PRESETS[n][k] === S[k])) || 'Custom'; }
+      saveSettings(); applySettings(); refresh();
+    });
+    rows.append(row);
+  }
+  function refresh() {
+    for (const [key, { el, kind, val, unit }] of Object.entries(inputs)) {
+      if (kind === 'check') el.checked = !!S[key]; else el.value = String(S[key]);
+      if (val) val.textContent = (key === 'sens' ? Number(S[key]).toFixed(2) : S[key]) + unit;
+    }
+    // The plain (no effects) view gets its smooth edges from the browser, which only changes on reload.
+    $('aaNote').textContent = !useComposer() && (S.aa > 0) !== startAA ? 'Anti-aliasing will switch over next time you load the page.' : '';
+  }
+  const open = () => { refresh(); root.classList.add('open'); keys.clear(); blockHeld = false; if (atkHeld) { atkHeld = false; send({ t: 'release' }); } $('menuClose').textContent = joined ? 'Back to the fight' : 'Done'; };
+  const close = () => root.classList.remove('open');
+  $('menuClose').onclick = () => { if (joined) lockPointer(); else close(); };
+  $('gear').onclick = open;
+  document.addEventListener('pointerlockchange', () => { if (locked()) close(); else if (joined) open(); });
+  return { open, close, refresh, isOpen: () => root.classList.contains('open') };
+})();
+
 // ---------- network ----------
 let ws = null, myId = null, connected = false;
 let prev = null, cur = null, prevT = 0, curT = 0, mySpawn = -1;
@@ -823,10 +907,10 @@ let atkHeld = false, blockHeld = false, dir = 'right';
 const locked = () => document.pointerLockElement === glCanvas;
 function lockPointer() { try { const r = glCanvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} }
 addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
+  if (e.target.tagName === 'INPUT' || menu.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;
-  if (e.code === 'KeyG' && !e.repeat) setQuality(quality + 1, true);
+  if (e.code === 'KeyG' && !e.repeat) { const P = ['Low', 'Medium', 'High']; S.auto = false; setPreset(P[(P.indexOf(S.preset) + 1) % 3]); }
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
   if (e.code === 'Space') e.preventDefault();
 });
@@ -836,7 +920,7 @@ addEventListener('contextmenu', (e) => joined && e.preventDefault());
 addEventListener('mousemove', (e) => {
   if (!locked()) return;
   // The camera turns slower while you're drawing or blocking, so steering the weapon doesn't spin you around.
-  const s = atkHeld || isBlocking() ? 0.0011 : 0.0023;
+  const s = (atkHeld || isBlocking() ? 0.0011 : 0.0023) * S.sens;
   look.yaw -= e.movementX * s;
   look.pitch = Math.max(-1.3, Math.min(1.3, look.pitch - e.movementY * s));
   flick.x += e.movementX; flick.y += e.movementY;
@@ -848,7 +932,7 @@ addEventListener('mousemove', (e) => {
   }
 });
 addEventListener('mousedown', (e) => {
-  if (!joined) return;
+  if (!joined || menu.isOpen()) return;
   audio.init();
   if (!locked()) { lockPointer(); return; }
   if (e.button === 0) { atkHeld = true; send({ t: 'hold', d: dir }); }
@@ -1024,7 +1108,8 @@ function drawHud(players, me, opp) {
   hctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   hctx.clearRect(0, 0, w, h);
   if (hurtFlash > 0) { hctx.fillStyle = `rgba(200,0,0,${hurtFlash * 0.35})`; hctx.fillRect(0, 0, w, h); }
-  if (qualityToast > 0) { hctx.globalAlpha = Math.min(1, qualityToast); text(`Graphics: ${QUALITY[quality]}  (press G to change)`, w / 2, h - 44, 16, '#fff'); hctx.globalAlpha = 1; }
+  if (qualityToast > 0) { hctx.globalAlpha = Math.min(1, qualityToast); text(toastText, w / 2, h - 44, 16, '#fff'); hctx.globalAlpha = 1; }
+  if (S.fps) text(`${perf.fps} fps`, w - 12, 22, 14, perf.fps >= 50 ? '#9be89b' : perf.fps >= 30 ? '#ffd27a' : '#ff8a7a', 'right');
 
   // Floating damage numbers and speech bubbles.
   for (const f of floaters) { const s = project(f.pos); if (!s) continue; hctx.globalAlpha = Math.min(1, f.life * 2); text(f.text, s[0], s[1], f.big ? 30 : 20, f.color); hctx.globalAlpha = 1; }
@@ -1059,7 +1144,7 @@ function drawHud(players, me, opp) {
     hctx.fillStyle = '#0008'; hctx.fillRect(bx, by + 22, bw, 8);
     hctx.fillStyle = me.stam > 25 ? '#ffd23f' : '#ff6b3f'; hctx.fillRect(bx, by + 22, (bw * me.stam) / STAM_MAX, 8);
     bodyChart(bx + bw + 40, h - 72, me);
-    if (me.weapon && !wheel.hiding()) text(`${WEAPONS[me.weapon].emoji} ${WEAPONS[me.weapon].name}`, bx + 2, by - 30, 15, '#fff', 'left');
+    if (me.weapon && !wheel.hiding()) text(`${WEAPONS[me.weapon].emoji} ${WEAPONS[me.weapon].name}${WEAPONS[me.weapon].two ? (me.parts.armR.cut || me.parts.armL.cut ? '  (two-handed, one arm: slow and weak!)' : '  (two-handed)') : ''}`, bx + 2, by - 30, 15, '#fff', 'left');
     if (opp) {
       text(opp.name + (opp.weapon && !wheel.hiding() ? `  ${WEAPONS[opp.weapon].emoji} ${WEAPONS[opp.weapon].name}` : ''), w - 24, 92, 14, TEAM_CSS[opp.color], 'right');
       hctx.fillStyle = '#0008'; hctx.fillRect(w - 264, 100, 240, 10);
@@ -1076,7 +1161,7 @@ function drawHud(players, me, opp) {
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   if (joined && !locked()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
-  hctx.fillText('WASD move · hold left click, steer, release to swing · hold right click + steer to block · right click mid-swing feints · F kick · M mute · G graphics', w / 2, h - 14);
+  hctx.fillText('WASD move · hold left click, steer, release to swing · hold right click + steer to block · right click mid-swing feints · F kick · M mute · Esc settings', w / 2, h - 14);
 }
 
 // ---------- the Wheel of Weapons ----------
@@ -1162,7 +1247,7 @@ const wheel = (() => {
 function swingFeel(W) {
   const word = (v, fast, slow) => (v <= 0.85 ? fast : v >= 1.2 ? slow : null);
   const feet = W.move >= 1.1 ? 'nimble feet' : W.move <= 0.9 ? 'heavy feet' : null; // move is a speed, so higher is faster
-  const bits = [word(W.draw, 'quick wind-up', 'slow wind-up'), word(W.swing, 'snappy swing', 'sweeping swing'), word(W.rec, 'fast recovery', 'long recovery'), feet].filter(Boolean);
+  const bits = [W.two && 'two-handed', word(W.draw, 'quick wind-up', 'slow wind-up'), word(W.swing, 'snappy swing', 'sweeping swing'), word(W.rec, 'fast recovery', 'long recovery'), feet].filter(Boolean);
   return bits.length ? bits.join(' · ') : 'balanced all round';
 }
 
@@ -1229,7 +1314,7 @@ function frame(now) {
   for (const a of [floaters, bubbles]) for (let i = a.length - 1; i >= 0; i--) if (a[i].life <= 0) a.splice(i, 1);
 
   watchFrameRate(dt);
-  if (quality >= 1) { grade.uniforms.hurt.value = Math.min(1, hurtFlash); composer.render(); } else renderer.render(scene, camera);
+  if (useComposer()) { grade.uniforms.hurt.value = Math.min(1, hurtFlash); composer.render(); } else renderer.render(scene, camera);
   drawHud(players, me, opp);
   requestAnimationFrame(frame);
 }
@@ -1250,12 +1335,12 @@ const music = (() => {
       if (!el || lastTrack !== t) { if (el) el.pause(); el = new Audio(t); el.loop = true; el.volume = 0; lastTrack = t; }
       else el.currentTime = 0;
       el.play().catch(() => {});
-      target = VOL;
+      target = VOL * (S.music / 100);
     },
     stop() { target = 0; },
     step(dt) {
       if (!el) return;
-      const goal = audio.muted ? 0 : target;
+      const goal = audio.muted ? 0 : target && VOL * (S.music / 100);
       el.volume = Math.max(0, Math.min(1, el.volume + Math.sign(goal - el.volume) * Math.min(Math.abs(goal - el.volume), dt * (goal > el.volume ? 0.6 : 0.35))));
       if (target === 0 && el.volume === 0 && !el.paused) el.pause();
     },
@@ -1265,8 +1350,9 @@ const music = (() => {
 const audio = {
   ctx: null, muted: false,
   init() { if (!this.ctx) { try { this.ctx = new AudioContext(); } catch {} } else if (this.ctx.state === 'suspended') this.ctx.resume(); },
-  ok() { return this.ctx && !this.muted; },
-  env(node, t, a, d, peak = 0.3) { const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); node.connect(g); g.connect(this.ctx.destination); return g; },
+  ok() { return this.ctx && !this.muted && S.sfx > 0; },
+  out() { if (!this.master) { this.master = this.ctx.createGain(); this.master.connect(this.ctx.destination); } this.master.gain.value = S.sfx / 100; return this.master; },
+  env(node, t, a, d, peak = 0.3) { const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); node.connect(g); g.connect(this.out()); return g; },
   noise(dur) { const b = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = this.ctx.createBufferSource(); s.buffer = b; return s; },
   whoosh(dir) {
     if (!this.ok()) return; const t = this.ctx.currentTime, n = this.noise(0.25), f = this.ctx.createBiquadFilter();
