@@ -26,7 +26,8 @@ export const T = {
   HEAVY_AT: 0.43,    // hold this long and the attack becomes heavy (scaled by the weapon's wind-up speed)
   MAX_HOLD: 2.5,     // auto-release after this
   ACTIVE: 0.18, RECOVER: 0.32, BOUNCE: 0.5,
-  FEINT_IN: 0.55,    // a swing can still be cancelled during this first fraction of it, if it hasn't hit yet
+  FEINT_IN: 0.55,
+  COMBO_AT: 0.5,     // from this far through a normal recovery you can wind up the next attack    // a swing can still be cancelled during this first fraction of it, if it hasn't hit yet
   CHAMBER: 0.14,     // a fresh swing this young chambers an incoming one from the matching side
   KICK: 0.42, KICK_HIT: [0.12, 0.26],
   KICK_MISS: 0.65,   // stumble after kicking nothing
@@ -387,7 +388,7 @@ export function resetFighter(p, side) {
     x: 0, y: 0, z: side === 0 ? 4 : -4, vx: 0, vy: 0, vz: 0, yaw: side === 0 ? 0 : Math.PI, pitch: 0, onGround: true,
     parts: newParts(), state: 'idle', st: 0, release: false, heavy: false, hitDone: false, blocking: false,
     stun: 0, flinch: 0, cd: 0, riposte: 0, stam: STAM_MAX, stamWait: 0,
-    dead: false, deathT: 0, downT: 0, fallYaw: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, bruiseAche: 0, color: side, panic: undefined,
+    dead: false, deathT: 0, downT: 0, fallYaw: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, bruiseAche: 0, color: side, panic: undefined, queued: null,
   });
   p.input.yaw = p.yaw; p.input.pitch = 0;
   p.spawnSeq = (p.spawnSeq || 0) + 1; // tells the client to snap its camera to the new spawn
@@ -397,16 +398,26 @@ const spend = (p, n) => { p.stam = Math.max(0, p.stam - n); p.stamWait = 0.7; };
 const canAct = (p) => !p.dead && p.stun <= 0 && !(p.downT > 0);
 
 // Start drawing the weapon back. The direction can still change until release.
+// An attack pressed while you're still finishing the last one (or a moment too early) isn't thrown
+// away: it's remembered for half a second and starts the instant you're free, so swings chain.
+const QUEUE_FOR = 0.5;
+// Combo: the second half of a normal recovery (not a parried bounce) can go straight into the next wind-up.
+const canStart = (p) => canAct(p) && !(p.flinch > 0) && p.stam >= 5
+  && ((p.state === 'idle' && !(p.cd > 0)) || (p.state === 'recover' && p.comboOk && p.st >= p.recDur * T.COMBO_AT));
 export function startHold(p, dir) {
-  if (!canAct(p) || p.state !== 'idle' || p.flinch > 0 || p.cd > 0 || p.stam < 5) return false;
-  p.state = 'hold'; p.st = 0; p.release = false; p.heavy = false; p.blocking = false;
+  if (!canStart(p)) {
+    if (!p.dead && p.state !== 'hold') p.queued = { dir, t: 0, release: false };
+    return false;
+  }
+  p.state = 'hold'; p.st = 0; p.release = false; p.heavy = false; p.blocking = false; p.queued = null; p.comboOk = false;
   if (DIRS.includes(dir)) p.sdir = dir;
   return true;
 }
-export function releaseHold(p) { if (p.state === 'hold') p.release = true; }
+export function releaseHold(p) { if (p.state === 'hold') p.release = true; else if (p.queued) p.queued.release = true; }
 // Cancel an attack: any time during the wind-up, or early in the swing before it connects.
 export function feint(p, room) {
   if (p.dead) return false;
+  p.queued = null;
   if (p.state === 'hold') { p.state = 'idle'; p.st = 0; p.cd = 0.15; spend(p, COST.feint * wpn(p).stam); }
   else if (p.state === 'active' && !p.hitDone && p.st < tm(p, 'ACTIVE') * T.FEINT_IN) { p.state = 'idle'; p.st = 0; p.cd = 0.2; p.heavy = false; spend(p, COST.swingFeint * wpn(p).stam); }
   else return false;
@@ -486,8 +497,8 @@ function stepPlayer(room, p, dt) {
         spend(p, (p.heavy ? COST.heavy : COST.swing) * wpn(p).stam);
         room.events.push({ t: 'swing', id: p.id, dir: p.sdir, heavy: p.heavy });
       }
-    } else if (p.state === 'active' && p.st >= tm(p, 'ACTIVE')) { p.state = 'recover'; p.st = 0; p.recDur = tm(p, 'RECOVER'); }
-    else if (p.state === 'recover' && p.st >= p.recDur) { p.state = 'idle'; p.st = 0; p.cd = 0.05; }
+    } else if (p.state === 'active' && p.st >= tm(p, 'ACTIVE')) { p.state = 'recover'; p.st = 0; p.recDur = tm(p, 'RECOVER'); p.comboOk = true; }
+    else if (p.state === 'recover' && p.st >= p.recDur) { p.state = 'idle'; p.st = 0; p.cd = p.queued ? 0 : 0.05; }
     else if (p.state === 'kick' && p.st >= T.KICK) {
       p.state = 'idle'; p.st = 0; p.cd = 0.1;
       // Kicking thin air leaves you overextended: you stumble forward and can't act for a moment.
@@ -496,6 +507,11 @@ function stepPlayer(room, p, dt) {
         p.stun = Math.max(p.stun, T.KICK_MISS); p.stamWait = Math.max(p.stamWait || 0, 0.8);
         room.events.push({ t: 'kickMiss', id: p.id });
       }
+    }
+    if (p.queued) { // a buffered attack: start it as soon as you can, on the side you're steering to now
+      const q = p.queued; q.t += dt;
+      if (q.t > QUEUE_FOR) p.queued = null;
+      else if (canStart(p) && startHold(p, DIRS.includes(p.input.d) ? p.input.d : q.dir) && q.release) p.release = true;
     }
     if (p.state === 'idle' && DIRS.includes(p.input.d)) p.gdir = p.input.d;
     p.blocking = !!p.input.b && p.state === 'idle' && p.stun <= 0 && !(p.downT > 0);
@@ -675,7 +691,7 @@ export function snapshotPlayer(p) {
   return {
     id: p.id, name: p.name, x: r3(p.x), y: r3(p.y), z: r3(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz), yaw: r3(p.yaw), pitch: r2(p.pitch),
     onGround: p.onGround, gdir: p.gdir, state: p.state, sdir: p.sdir, st: r3(p.st), saim: Math.round(p.saim), recDur: p.recDur,
-    heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
+    heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
     weapon: p.weapon, walk: r2(p.walk), score: p.score, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),

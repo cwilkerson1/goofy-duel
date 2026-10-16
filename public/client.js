@@ -914,7 +914,7 @@ const look = { yaw: 0, pitch: 0 };
 const flick = { x: 0, y: 0 };
 // The weapon trails a little behind when you turn, then settles.
 let turnPush = 0, turnLag = 0;
-let atkHeld = false, blockHeld = false, dir = 'right';
+let atkHeld = false, blockHeld = false, dir = 'right', recentMoves = [];
 const locked = () => document.pointerLockElement === glCanvas;
 function lockPointer() { try { const r = glCanvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} }
 addEventListener('keydown', (e) => {
@@ -943,7 +943,8 @@ addEventListener('mousemove', (e) => {
   // bigger flick still, so steering the camera mid-swing doesn't flip the attack by accident.
   const now = performance.now(), leak = Math.exp(-Math.min(1, (now - (flick.t || now)) / 1000) * 18); flick.t = now;
   flick.x = flick.x * leak + e.movementX; flick.y = flick.y * leak + e.movementY;
-  const ax = Math.abs(flick.x), ay = Math.abs(flick.y), need = atkHeld ? 48 : 30;
+  recentMoves.push([now, e.movementX, e.movementY]); while (recentMoves.length && now - recentMoves[0][0] > 150) recentMoves.shift();
+  const ax = Math.abs(flick.x), ay = Math.abs(flick.y), need = atkHeld ? 48 : 24;
   if (Math.max(ax, ay) > need) {
     if (ax > ay * 1.2) { const right = flick.x > 0; dir = right !== !!S.flipDir ? 'right' : 'left'; }
     else if (ay > ax * 1.2 && flick.y < 0) dir = 'over';
@@ -955,9 +956,13 @@ addEventListener('mousedown', (e) => {
   audio.init();
   if (!locked()) { lockPointer(); return; }
   if (e.button === 0) {
+    // Moving the mouse as you click picks that side, even with a short, unhurried motion.
+    const mx = recentMoves.reduce((a, m) => a + m[1], 0), my = recentMoves.reduce((a, m) => a + m[2], 0);
+    if (Math.hypot(mx, my) > 20) { if (Math.abs(mx) > Math.abs(my) * 1.2) dir = (mx > 0) !== !!S.flipDir ? 'right' : 'left'; else if (my < 0 && -my > Math.abs(mx) * 1.2) dir = 'over'; }
     atkHeld = true; send({ t: 'hold', d: dir });
     const s = cur && cur.players.find((q) => q && q.id === myId);
-    if (s && !s.dead && s.state === 'idle' && s.stam >= 5) swingIntent = { pressT: performance.now(), relT: null, b: isBlocking() };
+    // Pressed while the last swing is still going: the server remembers it and starts it the moment it can.
+    if (s && !s.dead && ['idle', 'active', 'recover'].includes(s.state) && s.stam >= 5) swingIntent = { pressT: performance.now(), made: performance.now(), relT: null, b: isBlocking(), q: s.state !== 'idle' };
   }
   if (e.button === 2) { blockHeld = true; if (atkHeld || swingIntent) feintAt = performance.now(); }
   if (e.button === 3 || e.button === 4) send({ t: 'kick' });
@@ -988,12 +993,17 @@ function predictMyAction(p, now) {
     if (!atkHeld && I.relT === null) Object.assign(I, { relT: now, dir, aim: look.pitch * 180 / Math.PI });
     if (!isBlocking()) I.b = false;
     const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
-    if (s.state !== 'idle' && s.state !== 'hold') swingIntent = null; // the server has caught up
+    if (I.q && (s.state === 'active' || s.state === 'recover')) {
+      // Still finishing the last swing: the new wind-up starts when the combo window opens (or at the end).
+      const left = s.state === 'active' ? tm(o, 'ACTIVE') - (s.st + age) + s.recDur * T.COMBO_AT : (s.comboOk ? s.recDur * T.COMBO_AT : s.recDur) - (s.st + age);
+      if (left > 0) I.pressT = Math.max(I.pressT, now + left * 1000);
+      if (now - I.made > (T.COMBO_AT + 1) * 1000) swingIntent = null;
+    } else if (s.state !== 'idle' && s.state !== 'hold') swingIntent = null; // the server has caught up
     else if (!free || (I.relT === null && isBlocking() && !I.b)) swingIntent = null; // stunned, or feinted
     else if (s.state === 'idle' && now - I.pressT > wait && now - go < 0) swingIntent = null; // the server said no
     else if (now - go > tm(o, 'ACTIVE') * 1000 + wait) swingIntent = null;
   }
-  if (swingIntent) {
+  if (swingIntent && !(I.q && (s.state === 'active' || s.state === 'recover') && now < I.pressT)) {
     const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
     if (now < go) Object.assign(o, { state: 'hold', st: (now - I.pressT) / 1000, sdir: dir, heavy: false, blocking: false });
     else Object.assign(o, { state: 'active', st: (now - go) / 1000, sdir: I.dir, saim: I.aim, heavy: (go - I.pressT) / 1000 >= tm(o, 'HEAVY_AT'), blocking: false });

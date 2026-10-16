@@ -68,6 +68,8 @@ mouse (press **Esc** to let go).
 *their* right arrives on *your* left. The only glow is white, when their attack has become a heavy.
 They can switch sides until they release, so stay sharp.
 
+**Chaining swings.** You don't have to wait for a swing to fully finish: click again while it's still going and the next attack starts the moment it can, halfway through the recovery. Move the mouse toward a side as you click to pick it, so right-then-left combos flow. (A swing that got parried still has its full recovery.)
+
 **The rhythm.** A clean block bounces their swing and gives you a quick **riposte**: your next draw
 is almost instant. A solid hit cancels whatever the victim was winding up. That makes most fights
 go attack, block, riposte.
