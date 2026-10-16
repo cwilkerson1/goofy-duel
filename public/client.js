@@ -36,7 +36,8 @@ const S = (() => {
   try { saved = JSON.parse(store.get('duel.settings')); } catch {}
   if (saved && typeof saved === 'object') for (const k of Object.keys(d)) { if (typeof saved[k] === typeof d[k]) d[k] = saved[k]; }
   else if (store.get('duel.quality') !== null) { d.preset = ['Low', 'Medium', 'High'][Number(store.get('duel.quality'))] || 'Medium'; Object.assign(d, PRESETS[d.preset]); d.auto = false; }
-  if (params.has('lowfx')) { d.preset = 'Low'; Object.assign(d, PRESETS.Low); d.auto = false; }
+  // Graphics are fixed at Low, the fastest setting, for everyone.
+  d.preset = 'Low'; Object.assign(d, PRESETS.Low); d.auto = false;
   return d;
 })();
 const saveSettings = () => store.set('duel.settings', JSON.stringify(S));
@@ -820,18 +821,6 @@ function clearGibs() { for (const b of gibs) scene.remove(b.g); gibs.length = 0;
 // Opens from the start screen's Settings button, or with Esc during a fight (Esc frees the mouse,
 // and the menu appears). "Back to the fight" grabs the mouse again.
 const MENU = [
-  ['Graphics'],
-  ['preset', 'Quality preset', 'select', [['Low', 'Low (fastest)'], ['Medium', 'Medium'], ['High', 'High (prettiest)'], ['Custom', 'Custom']]],
-  ['scale', 'Resolution', 'select', [[0.5, '50% (fastest)'], [0.75, '75%'], [1, '100%'], [2, 'Sharp (Retina)']]],
-  ['shadows', 'Shadows', 'select', [[0, 'Off'], [1, 'Low'], [2, 'Medium'], [3, 'High']]],
-  ['aa', 'Anti-aliasing (smooth edges)', 'select', [[0, 'Off'], [2, '2×'], [4, '4×']]],
-  ['bloom', 'Glow', 'check'],
-  ['ao', 'Ambient occlusion (soft contact shadows)', 'check'],
-  ['vignette', 'Vignette and red hurt flash', 'check'],
-  ['lights', 'Pumpkin lights', 'check'],
-  ['atmosphere', 'Mist, ghosts and bats', 'check'],
-  ['auto', 'Lower graphics by itself if the game runs slowly', 'check'],
-  ['fps', 'Show frame rate', 'check'],
   ['Controls'],
   ['sens', 'Mouse sensitivity', 'range', [0.2, 3, 0.05, '×']],
   ['fov', 'Field of view', 'range', [60, 110, 1, '°']],
@@ -920,7 +909,6 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || menu.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;
-  if (e.code === 'KeyG' && !e.repeat) { const P = ['Low', 'Medium', 'High']; S.auto = false; setPreset(P[(P.indexOf(S.preset) + 1) % 3]); }
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
   if (e.code === 'Space') e.preventDefault();
 });

@@ -59,8 +59,7 @@ mouse (press **Esc** to let go).
 | Feint | Right click while drawing back cancels the attack. Or switch sides just before you release. |
 | Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked, they knock the target back and cancel what they were doing, and they're short range. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
 | Mute | **M** |
-| Settings menu (graphics, mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
-| Cycle graphics preset (Low / Medium / High) | **G** |
+| Settings menu (mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
 
 **Reading attacks.** There are no hints. Watch where their weapon is drawn back to: a swing drawn on
 *their* right arrives on *your* left. The only glow is white, when their attack has become a heavy.
@@ -181,14 +180,10 @@ a different one. No restart is needed: just refresh the page. **M** mutes music 
 
 **Graphics.** The knights wear great helms, mail and team-coloured surcoats, and fight in a moonlit stone
 arena. All textures (stone, earth, wood, mail, steel, cloth) are generated in code when the page loads,
-so there are no image files to download. On top of that there's ambient occlusion (soft contact shadows),
-glow, reflections and a vignette. Press **Esc** in game (or **⚙ Settings** on the start screen) for the settings menu:
-a quality preset (**Low**, **Medium**, the default, or **High**), and each graphics option on its own
-(resolution, shadows, anti-aliasing, glow, ambient occlusion, vignette, pumpkin lights, mist and ghosts),
-plus mouse sensitivity, field of view, music and sound volume, and a frame-rate counter. Everything is
-remembered on that computer. **G** cycles the presets. If the game runs slowly it drops a preset by
-itself, until you change a graphics setting yourself (or untick that option). Adding `?lowfx` to the
-address forces Low.
+so there are no image files to download. Graphics are fixed at the fastest setting (Low) for everyone. Press **Esc** in game (or **⚙ Settings**
+on the start screen) for mouse sensitivity, field of view, and music and sound volume. These are remembered
+on that computer. The richer graphics options are still in the code (`PRESETS` in `public/client.js`)
+if you ever want them back.
 
 **Smooth over Wi-Fi.** Your own knight moves the instant you press a key and quietly lines up with
 the server afterwards, and your opponent is drawn from a short buffer that grows on a bumpy connection.
