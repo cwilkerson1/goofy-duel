@@ -912,7 +912,8 @@ const locked = () => document.pointerLockElement === glCanvas;
 function lockPointer() { try { const r = glCanvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} }
 addEventListener('keydown', (e) => {
   // Esc normally just frees the mouse (which opens the menu); if the mouse wasn't captured, it toggles the menu.
-  if (e.code === 'Escape' && !locked()) { if (menu.isOpen()) { if (!joined) menu.close(); } else menu.open(); return; }
+  // Browsers won't let Esc grab the mouse back, so in a fight closing the menu leaves a "click to fight" prompt.
+  if (e.code === 'Escape' && !locked()) { if (menu.isOpen()) menu.close(); else menu.open(); return; }
   if (e.target.tagName === 'INPUT' || menu.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;
@@ -1165,7 +1166,7 @@ function drawHud(players, me, opp) {
   if (cur.phase === 'spin' || wheel.visible()) wheel.draw(w, h, players);
   else if (cur.phase !== 'fight') text(cur.msg, w / 2, h * 0.32, cur.phase === 'roundEnd' ? 46 : 34, cur.phase === 'roundEnd' ? '#ffd23f' : '#fff');
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
-  if (joined && !locked()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
+  if (joined && !locked() && !menu.isOpen()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
   hctx.fillText('WASD move · hold left click, steer, release to swing · hold right click + steer to block · right click mid-swing feints · F kick · M mute · Esc settings', w / 2, h - 14);
 }
