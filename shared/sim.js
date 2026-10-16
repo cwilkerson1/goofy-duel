@@ -23,7 +23,7 @@ export const STAM_MAX = 100;
 export const T = {
   DRAW: 0.28,        // minimum time the weapon is drawn back before a release swings
   RIPOSTE_DRAW: 0.1, // draw time right after a successful block
-  HEAVY_AT: 0.85,    // hold this long and the attack becomes heavy
+  HEAVY_AT: 0.43,    // hold this long and the attack becomes heavy (scaled by the weapon's wind-up speed)
   MAX_HOLD: 2.5,     // auto-release after this
   ACTIVE: 0.18, RECOVER: 0.32, BOUNCE: 0.5,
   FEINT_IN: 0.55,    // a swing can still be cancelled during this first fraction of it, if it hasn't hit yet
