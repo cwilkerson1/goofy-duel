@@ -899,7 +899,7 @@ const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 // ---------- input: Last Oasis-style mouse direction ----------
 // Moving the mouse picks a side (left / right / up) that sticks until you move another way.
 // Hold left click to draw back on that side, keep steering, release to swing.
-// Hold right click and steer toward the incoming blade to block. Right click during a draw feints.
+// Hold right click and steer toward the incoming blade to block. Right click or Q during an attack feints.
 const keys = new Set();
 const look = { yaw: 0, pitch: 0 };
 const flick = { x: 0, y: 0 };
@@ -916,6 +916,7 @@ addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
+  if (e.code === 'KeyQ' && !e.repeat) feintNow();
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
@@ -944,14 +945,19 @@ addEventListener('mousedown', (e) => {
     const s = cur && cur.players.find((q) => q && q.id === myId);
     if (s && !s.dead && s.state === 'idle' && s.stam >= 5) swingIntent = { pressT: performance.now(), relT: null, b: isBlocking() };
   }
-  if (e.button === 2) blockHeld = true;
+  if (e.button === 2) { blockHeld = true; if (atkHeld || swingIntent) feintAt = performance.now(); }
   if (e.button === 3 || e.button === 4) send({ t: 'kick' });
 });
 addEventListener('mouseup', (e) => {
   if (e.button === 0 && atkHeld) { atkHeld = false; send({ t: 'release' }); }
   if (e.button === 2) blockHeld = false;
 });
-const isBlocking = () => blockHeld || keys.has('ShiftLeft') || keys.has('ShiftRight');
+// Block is right click only; Shift is sprint.
+const isBlocking = () => blockHeld;
+const isSprinting = () => keys.has('ShiftLeft') || keys.has('ShiftRight');
+// Cancel the attack you're making (a feint). Right click during an attack does the same, on the server.
+let feintAt = -1e9;
+function feintNow() { feintAt = performance.now(); swingIntent = null; send({ t: 'feint' }); }
 
 // Your own guard and swings are shown the moment you act, instead of a round trip to the server
 // later: the newest server state, run forward, plus your block, guard side and wind-up predicted
@@ -977,7 +983,8 @@ function predictMyAction(p, now) {
     const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
     if (now < go) Object.assign(o, { state: 'hold', st: (now - I.pressT) / 1000, sdir: dir, heavy: false, blocking: false });
     else Object.assign(o, { state: 'active', st: (now - go) / 1000, sdir: I.dir, saim: I.aim, heavy: (go - I.pressT) / 1000 >= tm(o, 'HEAVY_AT'), blocking: false });
-  } else if (o.state === 'idle' && free) Object.assign(o, { blocking: isBlocking(), gdir: dir });
+  } else if (now - feintAt < wait && (o.state === 'hold' || (o.state === 'active' && s.st < tm(o, 'ACTIVE') * T.FEINT_IN))) Object.assign(o, { state: 'idle', st: 0, heavy: false });
+  else if (o.state === 'idle' && free) Object.assign(o, { blocking: isBlocking(), gdir: dir });
   else if (o.state === 'hold') o.sdir = dir;
   return o;
 }
@@ -989,7 +996,7 @@ function sendInput(dt) {
   const k = Math.exp(-dt * 12); flick.x *= k; flick.y *= k;
   const o = {
     t: 'in', mf: moveFwd(), ms: moveSide(),
-    j: keys.has('Space'), b: isBlocking(), yaw: Math.round(look.yaw * 1000) / 1000, pitch: Math.round(look.pitch * 1000) / 1000, d: dir,
+    j: keys.has('Space'), b: isBlocking(), s: isSprinting(), yaw: Math.round(look.yaw * 1000) / 1000, pitch: Math.round(look.pitch * 1000) / 1000, d: dir,
   };
   const s = JSON.stringify(o), now = performance.now();
   if ((s !== lastSent && now - lastSentT > 30) || now - lastSentT > 100) { send(o); lastSent = s; lastSentT = now; }
@@ -1141,6 +1148,15 @@ function drawHud(players, me, opp) {
     const cx = w / 2, cy = h / 2;
     hctx.beginPath(); hctx.arc(cx, cy, 2.5, 0, Math.PI * 2); hctx.fillStyle = '#ffffffc0'; hctx.fill();
     if (me.riposte) text('RIPOSTE! swing now', cx, cy - 70, 16, '#3fe0ff');
+    // Wind-up ring: a thin ring fills while you hold an attack; the tick marks where a light attack is
+    // ready, and when it closes into a solid ring the attack has become a heavy.
+    if (me.state === 'hold') {
+      const draw = tm(me, 'DRAW'), full = tm(me, 'HEAVY_AT'), k = Math.min(1, me.st / full), heavy = me.st >= full;
+      hctx.lineCap = 'round'; hctx.lineWidth = heavy ? 3 : 2; hctx.strokeStyle = heavy ? '#ffb03f' : '#ffffff90';
+      hctx.beginPath(); hctx.arc(cx, cy, 14, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); hctx.stroke();
+      const a = -Math.PI / 2 + (draw / full) * Math.PI * 2;
+      if (!heavy) { hctx.lineWidth = 2; hctx.strokeStyle = me.st >= draw ? '#ffffff' : '#ffffff50'; hctx.beginPath(); hctx.moveTo(cx + Math.cos(a) * 10, cy + Math.sin(a) * 10); hctx.lineTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18); hctx.stroke(); }
+    }
 
     // Health: body bar and a little body diagram.
     const bx = 24, by = h - 44, bw = 240;
@@ -1167,7 +1183,7 @@ function drawHud(players, me, opp) {
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   if (joined && !locked() && !menu.isOpen()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
-  hctx.fillText('WASD move · hold left click, steer, release to swing · hold right click + steer to block · right click mid-swing feints · F kick · M mute · Esc settings', w / 2, h - 14);
+  hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block · Q feint · F kick · Esc settings', w / 2, h - 14);
 }
 
 // ---------- the Wheel of Weapons ----------
@@ -1269,14 +1285,14 @@ function footsteps(p, isMe) {
 }
 
 // ---------- main loop ----------
-let last = performance.now(), clock = 0, lastPhase = '';
+let last = performance.now(), clock = 0, lastPhase = '', wasHeavy = false;
 function frame(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; clock += dt;
   const players = interpPlayers().slice();
   let me = players.find((p) => p && p.id === myId) || null;
   const opp = players.find((p) => p && p.id !== myId) || null;
   if (me && pred.on && !me.dead) {
-    pred.step(cur.players.find((p) => p && p.id === myId), opp, { mf: moveFwd(), ms: moveSide(), j: keys.has('Space'), b: isBlocking(), yaw: look.yaw }, dt, now);
+    pred.step(cur.players.find((p) => p && p.id === myId), opp, { mf: moveFwd(), ms: moveSide(), j: keys.has('Space'), b: isBlocking(), s: isSprinting(), yaw: look.yaw }, dt, now);
     me = { ...me, x: pred.x, y: pred.y, z: pred.z, vx: pred.vx, vz: pred.vz, walk: pred.walk, onGround: pred.onGround };
     players[players.findIndex((p) => p && p.id === myId)] = me;
   }
@@ -1290,6 +1306,10 @@ function frame(now) {
   music.step(dt);
   fightFlash = Math.max(0, fightFlash - dt); qualityToast = Math.max(0, qualityToast - dt);
   if (me) sendInput(dt);
+  // A rising ping the moment your held attack becomes a heavy.
+  const heavyNow = !!me && me.state === 'hold' && isHeavy(me);
+  if (heavyNow && !wasHeavy) audio.charge();
+  wasHeavy = heavyNow;
   turnLag += (Math.max(-0.12, Math.min(0.12, -turnPush * 1.5)) - turnLag) * Math.min(1, dt * 10); turnPush = 0;
 
   // Sync knight meshes with the players in the arena.
@@ -1392,6 +1412,12 @@ const audio = {
     const o = this.ctx.createOscillator(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.08); this.env(o, t, 0.003, 0.08, vol * 0.8); o.start(t); o.stop(t + 0.12);
     // a faint clink of armour
     const c = this.ctx.createOscillator(); c.type = 'triangle'; c.frequency.value = 2400 + Math.random() * 900; this.env(c, t + 0.01, 0.002, 0.06, vol * 0.12); c.start(t + 0.01); c.stop(t + 0.1);
+  },
+  charge() {
+    if (!this.ok()) return;
+    const t = this.ctx.currentTime, o = this.ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(520, t); o.frequency.exponentialRampToValueAtTime(1040, t + 0.12);
+    this.env(o, t, 0.01, 0.2, 0.1); o.start(t); o.stop(t + 0.3);
   },
   thud() {
     if (!this.ok()) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator();

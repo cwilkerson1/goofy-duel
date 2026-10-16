@@ -52,11 +52,12 @@ mouse (press **Esc** to let go).
 | Do this | How |
 |---|---|
 | Move / jump / look | **W A S D**, **Space**, mouse |
+| Sprint | **Hold Shift** while moving forward: 60% faster, but it drains stamina and you can't sprint while attacking or blocking. |
 | Pick a side | Move the mouse **left**, **right** or **up**. Your chosen side is **invisible**: no indicator, you just have to know. It stays until you move another way. |
-| Attack | **Hold left click** to draw the weapon back on that side. You can keep steering to switch sides, then **release** to swing. |
-| Heavy attack | Keep holding until your weapon glows white. It does 1.5× damage and staggers someone who blocks it, but you move slower while charging. |
-| Block | **Hold right click** (or Shift) and move the mouse **toward the side the blade is coming from**. |
-| Feint | Right click while drawing back cancels the attack. Or switch sides just before you release. |
+| Light attack | **Click** (or hold just long enough to draw back) and release. Quick to throw, quick to recover. A ring round the crosshair fills while you hold; once it passes the tick mark, letting go swings a light attack. |
+| Heavy attack | **Keep holding** until the ring closes, you hear a rising ping and your weapon glows white. Your weapon draws back further, the swing is a third slower and you recover slower, but it does 1.5× damage and staggers someone who blocks it. You move slower while charging. |
+| Block | **Hold right click** and move the mouse **toward the side the blade is coming from**. |
+| Feint | **Q** (or right click) cancels your attack: any time while drawing back, and even early in the swing itself, up to about halfway, as long as it hasn't hit yet. Cancelling a swing already in motion costs more stamina. Or switch sides just before you release. |
 | Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked and they're short range. **Land it** and the target is knocked flat on their back for about two seconds: they can't block, swing or move until they've got up, so step in and look down to hit them on the ground. A kick burns most of your stamina (65 of 100) and you need at least 40 to throw one. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
 | Mute | **M** |
 | Settings menu (mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
@@ -72,7 +73,7 @@ go attack, block, riposte.
 **Chamber.** Release your own swing from the side their attack is coming at (the same side you'd
 block) just as theirs is about to land. Their swing is cancelled and yours keeps going.
 
-**Stamina** (the yellow bar) is spent by swings, heavies, kicks, feints, jumps and absorbing blocks. If you
+**Stamina** (the yellow bar) is spent by swings, heavies, kicks, feints, jumps, sprinting and absorbing blocks. If you
 block with too little stamina, your guard breaks and the hit lands anyway.
 
 **Footwork.** Knights in armour walk at a steady pace, back off slower than they advance, and take a

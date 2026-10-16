@@ -4,9 +4,12 @@
 //
 // Combat follows Last Oasis-style directional melee:
 // - Hold attack to draw the weapon back, move the mouse to pick left / right / overhead,
-//   release to swing. Holding past HEAVY_AT makes a heavy attack.
+//   release to swing. A quick release is a light attack; holding past HEAVY_AT winds up a heavy one,
+//   which swings slower, recovers slower, hits half again as hard and staggers through a block.
 // - Block by holding block and moving the mouse toward the side the attack comes from.
-// - Block while holding an attack to feint. Kick is unblockable and interrupts.
+// - Feint (Q, or block) to cancel an attack: any time while winding up, or early in the swing itself
+//   before it connects. Kick is unblockable and interrupts.
+// - Sprint (Shift) when idle and moving forward; it burns stamina.
 // - Attacking into an incoming swing from the matching side, just in time, is a chamber.
 
 export const ARENA_R = 11;
@@ -23,6 +26,7 @@ export const T = {
   HEAVY_AT: 0.85,    // hold this long and the attack becomes heavy
   MAX_HOLD: 2.5,     // auto-release after this
   ACTIVE: 0.18, RECOVER: 0.32, BOUNCE: 0.5,
+  FEINT_IN: 0.55,    // a swing can still be cancelled during this first fraction of it, if it hasn't hit yet
   CHAMBER: 0.14,     // a fresh swing this young chambers an incoming one from the matching side
   KICK: 0.42, KICK_HIT: [0.12, 0.26],
   KICK_MISS: 0.65,   // stumble after kicking nothing
@@ -90,13 +94,16 @@ const PHASE = { DRAW: 'draw', HEAVY_AT: 'draw', ACTIVE: 'swing', CHAMBER: 'swing
 export const armsLeft = (p) => (p.parts.armR.cut ? 0 : 1) + (p.parts.armL.cut ? 0 : 1);
 // A two-hander with only one arm left to swing it.
 export const oneHanding = (p) => !!wpn(p).two && armsLeft(p) < 2;
-export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1); // weapon-scaled timing
+// Heavy attacks swing a third slower and take a bit longer to recover from.
+const HEAVY_TIME = { ACTIVE: 1.35, RECOVER: 1.2, CHAMBER: 1.35 };
+export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) // weapon-scaled timing
+  * (p.heavy && p.state !== 'hold' ? HEAVY_TIME[k] ?? 1 : 1);
 
 // Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
 export const BLEED = { fresh: 1.2, trickle: 0.4, ease: 0.05 };
 // Bruising from blunt hits, in health per second: it throbs at first, then eases to a dull ache.
 export const BRUISE = { perDamage: 0.03, linger: 0.3, ease: 0.05 };
-export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 65, kickMin: 40, feint: 6, jump: 6 };
+export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 65, kickMin: 40, feint: 6, swingFeint: 10, jump: 6, sprint: 14 };
 
 // Directions name the side the weapon is drawn back on, from the attacker's point of view.
 // The blade arrives on the defender's opposite side, so they block with the mirrored direction.
@@ -122,17 +129,20 @@ export const forward = (yaw) => [-Math.sin(yaw), 0, -Math.cos(yaw)];
 export const rightOf = (yaw) => [Math.cos(yaw), 0, -Math.sin(yaw)];
 // Footwork. A knight in armour walks at a brisk 2.8 m/s, backs off slower and sidesteps a bit slower,
 // and takes a moment to get going or stop. Used by the server and by your browser's prediction.
-export const WALK_SPEED = 2.8, ACCEL = 8, STRIDE = 3;
-export function moveGoal(p, mf, ms, yaw, blocking) {
+// Sprinting (Shift) is 60% faster, forward only, with both legs, and only with a weapon at rest.
+export const WALK_SPEED = 2.8, ACCEL = 8, STRIDE = 3, SPRINT = 1.6;
+export function moveGoal(p, mf, ms, yaw, blocking, sprint) {
   const legs = legsLeft(p);
   let speed = (legs === 2 ? WALK_SPEED : legs === 1 ? 2 : 0.9) * wpn(p).move;
+  const sprinting = !!sprint && mf > 0 && legs === 2 && p.state === 'idle' && !blocking && p.stam > 1 && p.onGround !== false && !(p.stun > 0) && !(p.downT > 0);
+  if (sprinting) speed *= SPRINT;
   if (p.state === 'hold') speed *= isHeavy(p) ? 0.45 : 0.65;
   else if (p.state !== 'idle' || blocking) speed *= 0.5;
   if (p.stun > 0 || p.downT > 0) speed = 0;
   const f = forward(yaw), r = rightOf(yaw), fw = mf > 0 ? mf : mf * 0.65, sd = ms * 0.8;
   let mx = f[0] * fw + r[0] * sd, mz = f[2] * fw + r[2] * sd;
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
-  return { vx: mx * speed, vz: mz * speed, moving: ml > 0.1 };
+  return { vx: mx * speed, vz: mz * speed, moving: ml > 0.1, sprinting: sprinting && ml > 0.1 };
 }
 export const isHeavy = (p) => (p.state === 'hold' && p.st >= tm(p, 'HEAVY_AT')) || (p.state === 'active' && p.heavy);
 // How far up/down a side slash is aimed, from the head pitch in degrees.
@@ -141,6 +151,8 @@ const slashTilt = (p, deg) => (p.sdir === 'over' ? 0 : clamp(deg, -75, 25) * 0.9
 // An overhead chop follows through lower when you look down.
 const chopTilt = (p, deg) => (p.sdir === 'over' ? clamp(deg + 25, -35, 0) : 0);
 
+// Where the weapon is drawn back to: a light attack's wind-up, or (hk = 1) a heavy's bigger one.
+const windUp = (s, hk) => [s.wa * (1 + 0.15 * hk), s.wp + (s.wp > 90 ? 18 : 15) * hk];
 // Local (forward, right, up) direction from blade yaw/pitch in degrees.
 const bladeDir = (a, p) => [Math.cos(p * D2R) * Math.cos(a * D2R), Math.cos(p * D2R) * Math.sin(a * D2R), Math.sin(p * D2R)];
 const norm = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
@@ -163,14 +175,17 @@ export function swordLocal(p) {
   const s = SWING[p.sdir];
   if (p.state === 'hold') {
     const k = ease(clamp(p.st / tm(p, 'DRAW'), 0, 1));
-    return mix(guardPose(p), swingPose(s.wa, s.wp + slashTilt(p, p.pitch / D2R)), k);
+    // Charging a heavy: the weapon keeps going further back until it's ready.
+    const hk = ease(clamp((p.st - tm(p, 'DRAW')) / (tm(p, 'HEAVY_AT') - tm(p, 'DRAW')), 0, 1));
+    const [wa, wp] = windUp(s, hk);
+    return mix(guardPose(p), swingPose(wa, wp + slashTilt(p, p.pitch / D2R)), k);
   }
   const tilt = slashTilt(p, p.saim);
   if (p.state === 'active') {
     // The blade leaves from exactly where it was drawn back to, picks up speed, and slows into the
     // follow-through, so there's no jump at release and no robotic constant-speed sweep.
-    const u = clamp(p.st / tm(p, 'ACTIVE'), 0, 1), k = u * u * (3 - 2 * u);
-    return swingPose(lerp(s.wa, s.a[1], k), lerp(s.wp, s.p[1] + chopTilt(p, p.saim), k) + tilt);
+    const u = clamp(p.st / tm(p, 'ACTIVE'), 0, 1), k = u * u * (3 - 2 * u), [wa, wp] = windUp(s, p.heavy ? 1 : 0);
+    return swingPose(lerp(wa, s.a[1], k), lerp(wp, s.p[1] + chopTilt(p, p.saim), k) + tilt);
   }
   if (p.state === 'recover') {
     const k = ease(clamp(p.st / p.recDur, 0, 1));
@@ -362,7 +377,7 @@ export function newPlayer(id, name) {
     weapon: 'longsword', parts: newParts(), gdir: 'right', state: 'idle', sdir: 'right', st: 0, saim: 0, recDur: T.RECOVER,
     release: false, heavy: false, hitDone: false, blocking: false, stun: 0, flinch: 0, cd: 0, riposte: 0,
     stam: STAM_MAX, stamWait: 0, dead: false, deathT: 0, headless: false,
-    walk: 0, bleed: 0, score: 0, color: 0, input: { mf: 0, ms: 0, j: 0, b: 0 }, prevB: 0,
+    walk: 0, bleed: 0, score: 0, color: 0, input: { mf: 0, ms: 0, j: 0, b: 0, s: 0 }, prevB: 0,
   };
 }
 
@@ -388,6 +403,15 @@ export function startHold(p, dir) {
   return true;
 }
 export function releaseHold(p) { if (p.state === 'hold') p.release = true; }
+// Cancel an attack: any time during the wind-up, or early in the swing before it connects.
+export function feint(p, room) {
+  if (p.dead) return false;
+  if (p.state === 'hold') { p.state = 'idle'; p.st = 0; p.cd = 0.15; spend(p, COST.feint * wpn(p).stam); }
+  else if (p.state === 'active' && !p.hitDone && p.st < tm(p, 'ACTIVE') * T.FEINT_IN) { p.state = 'idle'; p.st = 0; p.cd = 0.2; p.heavy = false; spend(p, COST.swingFeint * wpn(p).stam); }
+  else return false;
+  room.events.push({ t: 'feint', id: p.id });
+  return true;
+}
 export function kick(p, room) {
   // A kick is a big commitment: it needs a good reserve of stamina and burns most of it.
   if (!canAct(p) || !(p.state === 'idle' || p.state === 'hold') || p.stam < COST.kickMin || !legsLeft(p) || !p.onGround) return false;
@@ -450,20 +474,16 @@ function stepPlayer(room, p, dt) {
     if (p.downT > 0) { p.downT += dt; if (p.downT >= DOWN.fall + DOWN.lie + DOWN.rise) p.downT = 0; }
     const blockPressed = p.input.b && !p.prevB;
     p.prevB = p.input.b;
-    if (p.state === 'hold') {
+    if (blockPressed && feint(p, room)) { /* pressing block mid-attack cancels it */ }
+    else if (p.state === 'hold') {
       if (DIRS.includes(p.input.d)) p.sdir = p.input.d;
-      if (blockPressed) { // feint
-        p.state = 'idle'; p.cd = 0.15; spend(p, COST.feint * wpn(p).stam);
-        room.events.push({ t: 'feint', id: p.id });
-      } else {
-        if (p.st >= T.MAX_HOLD) p.release = true;
-        const draw = p.riposte > 0 ? T.RIPOSTE_DRAW : tm(p, 'DRAW');
-        if (p.release && p.st >= draw) {
-          p.heavy = p.st >= tm(p, 'HEAVY_AT'); p.saim = p.pitch / D2R;
-          p.state = 'active'; p.st = 0; p.hitDone = false; p.riposte = 0;
-          spend(p, (p.heavy ? COST.heavy : COST.swing) * wpn(p).stam);
-          room.events.push({ t: 'swing', id: p.id, dir: p.sdir, heavy: p.heavy });
-        }
+      if (p.st >= T.MAX_HOLD) p.release = true;
+      const draw = p.riposte > 0 ? T.RIPOSTE_DRAW : tm(p, 'DRAW');
+      if (p.release && p.st >= draw) {
+        p.heavy = p.st >= tm(p, 'HEAVY_AT'); p.saim = p.pitch / D2R;
+        p.state = 'active'; p.st = 0; p.hitDone = false; p.riposte = 0;
+        spend(p, (p.heavy ? COST.heavy : COST.swing) * wpn(p).stam);
+        room.events.push({ t: 'swing', id: p.id, dir: p.sdir, heavy: p.heavy });
       }
     } else if (p.state === 'active' && p.st >= tm(p, 'ACTIVE')) { p.state = 'recover'; p.st = 0; p.recDur = tm(p, 'RECOVER'); }
     else if (p.state === 'recover' && p.st >= p.recDur) { p.state = 'idle'; p.st = 0; p.cd = 0.05; }
@@ -483,7 +503,9 @@ function stepPlayer(room, p, dt) {
     else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * dt);
 
     const legs = legsLeft(p);
-    const goal = moveGoal(p, p.input.mf, p.input.ms, p.yaw, p.blocking), ml = goal.moving ? 1 : 0;
+    const goal = moveGoal(p, p.input.mf, p.input.ms, p.yaw, p.blocking, p.input.s), ml = goal.moving ? 1 : 0;
+    p.sprinting = goal.sprinting;
+    if (p.sprinting) { p.stam = Math.max(0, p.stam - COST.sprint * dt); p.stamWait = Math.max(p.stamWait, 0.4); }
     const accel = p.onGround ? ACCEL : 2;
     p.vx += (goal.vx - p.vx) * Math.min(1, accel * dt);
     p.vz += (goal.vz - p.vz) * Math.min(1, accel * dt);
@@ -646,7 +668,7 @@ export function snapshotPlayer(p) {
   return {
     id: p.id, name: p.name, x: r3(p.x), y: r3(p.y), z: r3(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz), yaw: r3(p.yaw), pitch: r2(p.pitch),
     onGround: p.onGround, gdir: p.gdir, state: p.state, sdir: p.sdir, st: r3(p.st), saim: Math.round(p.saim), recDur: p.recDur,
-    heavy: p.heavy, blocking: p.blocking, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
+    heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
     weapon: p.weapon, walk: r2(p.walk), score: p.score, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),

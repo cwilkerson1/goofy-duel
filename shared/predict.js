@@ -26,7 +26,7 @@ export function makePredictor() {
   step(s, opp, inp, dt, now) {
     if (!this.on || !s) return;
     const legs = legsLeft(s);
-    const goal = moveGoal(s, inp.mf, inp.ms, inp.yaw, inp.b && s.state === 'idle' && s.stun <= 0), ml = goal.moving ? 1 : 0;
+    const goal = moveGoal(s, inp.mf, inp.ms, inp.yaw, inp.b && s.state === 'idle' && s.stun <= 0, inp.s), ml = goal.moving ? 1 : 0;
     const accel = this.onGround ? ACCEL : 2;
     this.vx += (goal.vx - this.vx) * Math.min(1, accel * dt);
     this.vz += (goal.vz - this.vz) * Math.min(1, accel * dt);

@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick } from './shared/sim.js';
+import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint } from './shared/sim.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -143,7 +143,7 @@ server.on('upgrade', (req, socket) => {
     if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
     if (m.t === 'in') {
       const i = me.input, c = (v) => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
-      i.mf = c(m.mf); i.ms = c(m.ms); i.j = m.j ? 1 : 0; i.b = m.b ? 1 : 0; i.d = m.d;
+      i.mf = c(m.mf); i.ms = c(m.ms); i.j = m.j ? 1 : 0; i.b = m.b ? 1 : 0; i.s = m.s ? 1 : 0; i.d = m.d;
       if (Number.isFinite(m.yaw)) i.yaw = m.yaw;
       if (Number.isFinite(m.pitch)) i.pitch = Math.max(-1.5, Math.min(1.5, m.pitch));
     } else if ((room.phase === 'countdown' || room.phase === 'spin') && (m.t === 'hold' || m.t === 'atk' || m.t === 'kick')) {
@@ -151,6 +151,7 @@ server.on('upgrade', (req, socket) => {
     } else if (m.t === 'hold') startHold(me, m.d);
     else if (m.t === 'release') releaseHold(me);
     else if (m.t === 'kick') kick(me, room);
+    else if (m.t === 'feint') feint(me, room);
     else if (m.t === 'atk') tryAttack(me, m.d);
   };
   ws.onclose = () => {
