@@ -40,6 +40,8 @@ If OpenClaw runs your Mac mini, you can hand it the steps in plain words, for ex
 To keep it running all the time (and after reboots), have it install the launchd file in
 `mac/com.goofyduel.server.plist`. The comments at the top of that file say which two paths to edit
 and the two commands to load or stop it. Logs go to `/tmp/goofyduel.log`.
+The launchd file also tells macOS not to throttle the server in the background, which keeps the
+game's timing steady. If you installed it before, copy it over again (editing the two paths) and reload it.
 
 ## How to play
 
@@ -155,6 +157,7 @@ its own arena name on the start screen, or add `?room=name` to the link.
 ```
 server.js          HTTP + WebSocket server and the 60 Hz game loop
 shared/sim.js      Combat rules, body poses, 3D hit detection (used by server and browser)
+shared/predict.js  Moves your own knight instantly in the browser, before the server confirms it
 public/index.html  Start screen
 public/client.js   3D arena, knights, blood and flying limbs, HUD, sounds (all synthesized), input
 public/music/      Fight music: drop audio files here
@@ -174,5 +177,9 @@ glow, reflections and a vignette. There are three graphics levels: **Low**, **Me
 occlusion and full Retina resolution). Press **G** in game to switch; your choice is remembered on that
 computer. If the game runs slowly, it drops a level by itself until you pick one. Adding `?lowfx` to the
 address forces Low.
+
+**Smooth over Wi-Fi.** Your own knight moves the instant you press a key and quietly lines up with
+the server afterwards, and your opponent is drawn from a short buffer that grows on a bumpy connection.
+A wired connection or 5 GHz Wi-Fi still gives the crispest fights.
 
 Tuning knobs (timings in `T`, stamina costs in `COST`, damage and swing arcs in `SWING`, part health) are at the top of `shared/sim.js`.

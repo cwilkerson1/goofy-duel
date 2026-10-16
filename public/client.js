@@ -7,6 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy } from '/shared/sim.js';
+import { makePredictor } from '/shared/predict.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
 const TEAM_CSS = ['#e0493e', '#3e7be0'];
@@ -794,14 +795,16 @@ let prev = null, cur = null, prevT = 0, curT = 0, mySpawn = -1;
 function connect(name, room) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`);
-  ws.onopen = () => { connected = true; };
+  ws.onopen = () => { connected = true; send({ t: 'ping', c: performance.now() }); };
   ws.onclose = () => { connected = false; setTimeout(() => connect(name, room), 1500); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'welcome') { myId = m.id; return; }
+    if (m.t === 'pong') { const r = performance.now() - m.c; pred.rtt = pred.rtt === null ? r : pred.rtt * 0.8 + r * 0.2; return; }
     if (m.t === 's') {
       prev = cur; prevT = curT; cur = m; curT = performance.now(); netBuffer.push(m, curT);
       const me = m.players.find((p) => p && p.id === myId);
+      pred.correct(me, m.phase, curT);
       if (me && me.spawn !== mySpawn) { mySpawn = me.spawn; look.yaw = me.yaw; look.pitch = 0; }
       for (const ev of m.ev) handleEvent(ev);
     }
@@ -858,12 +861,13 @@ addEventListener('mouseup', (e) => {
 });
 const isBlocking = () => blockHeld || keys.has('ShiftLeft') || keys.has('ShiftRight');
 
+const moveFwd = () => (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+const moveSide = () => (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
 let lastSent = '', lastSentT = 0;
 function sendInput(dt) {
   const k = Math.exp(-dt * 12); flick.x *= k; flick.y *= k;
   const o = {
-    t: 'in', mf: (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0),
-    ms: (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0),
+    t: 'in', mf: moveFwd(), ms: moveSide(),
     j: keys.has('Space'), b: isBlocking(), yaw: Math.round(look.yaw * 1000) / 1000, pitch: Math.round(look.pitch * 1000) / 1000, d: dir,
   };
   const s = JSON.stringify(o), now = performance.now();
@@ -953,7 +957,7 @@ const netBuffer = {
     if (typeof m.n !== 'number') return;
     const st = (m.n / 60) * 1000, lag = now - st;
     // offset tracks the fastest arrival seen, creeping up slowly so clock drift can't strand it
-    this.offset = this.offset === null ? lag : Math.min(lag, this.offset + 0.5);
+    this.offset = this.offset === null ? lag : Math.min(lag, this.offset + 2);
     const j = lag - this.offset;
     this.jitter = j > this.jitter ? j : this.jitter * 0.97 + j * 0.03;
     this.delay += (Math.min(250, Math.max(45, this.jitter * 1.5 + 40)) - this.delay) * 0.1;
@@ -991,6 +995,9 @@ function interpPlayers() {
     return { ...o, parts: p.parts, dead: p.dead, deathT: p.dead ? o.deathT : 0, headless: p.headless, weapon: p.weapon, score: p.score, stam: p.stam, bleed: p.bleed, bruise: p.bruise, color: p.color, name: p.name };
   });
 }
+
+// ---------- your own movement, predicted (shared/predict.js) ----------
+const pred = makePredictor();
 
 // ---------- HUD ----------
 function project(v) {
@@ -1163,9 +1170,14 @@ function swingFeel(W) {
 let last = performance.now(), clock = 0, lastPhase = '';
 function frame(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; clock += dt;
-  const players = interpPlayers();
-  const me = players.find((p) => p && p.id === myId) || null;
+  const players = interpPlayers().slice();
+  let me = players.find((p) => p && p.id === myId) || null;
   const opp = players.find((p) => p && p.id !== myId) || null;
+  if (me && pred.on && !me.dead) {
+    pred.step(cur.players.find((p) => p && p.id === myId), opp, { mf: moveFwd(), ms: moveSide(), j: keys.has('Space'), b: isBlocking(), yaw: look.yaw }, dt, now);
+    me = { ...me, x: pred.x, y: pred.y, z: pred.z, walk: pred.walk, onGround: pred.onGround };
+    players[players.findIndex((p) => p && p.id === myId)] = me;
+  }
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(); }
     else music.stop();

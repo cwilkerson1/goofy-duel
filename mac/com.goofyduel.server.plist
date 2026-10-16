@@ -21,6 +21,8 @@
   <dict><key>PORT</key><string>3000</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
+  <!-- a game server needs steady timing: stop macOS from throttling it in the background -->
+  <key>ProcessType</key><string>Interactive</string>
   <key>StandardOutPath</key><string>/tmp/goofyduel.log</string>
   <key>StandardErrorPath</key><string>/tmp/goofyduel.log</string>
 </dict>

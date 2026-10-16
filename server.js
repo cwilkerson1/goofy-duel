@@ -116,6 +116,7 @@ server.on('upgrade', (req, socket) => {
 
   ws.onmessage = (raw) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
+    if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
     if (m.t === 'in') {
       const i = me.input, c = (v) => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
       i.mf = c(m.mf); i.ms = c(m.ms); i.j = m.j ? 1 : 0; i.b = m.b ? 1 : 0; i.d = m.d;
@@ -142,8 +143,16 @@ server.on('upgrade', (req, socket) => {
   };
 });
 
+// Fixed 60 Hz steps tied to the real clock, so the game runs at the same speed even when the
+// operating system wakes the timer late (macOS does this to background apps).
 let frame = 0;
+const t0 = process.hrtime.bigint();
 setInterval(() => {
+  const due = Math.floor(Number(process.hrtime.bigint() - t0) / 1e9 / TICK);
+  if (due - frame > 30) frame = due - 1; // after a long stall, skip ahead instead of fast-forwarding
+  while (frame < due) tick();
+}, 4);
+function tick() {
   frame++;
   for (const room of rooms.values()) {
     stepRoom(room, TICK);
@@ -156,7 +165,7 @@ setInterval(() => {
     room.events = [];
     for (const c of room.clients) c.send(msg);
   }
-}, TICK * 1000);
+}
 
 server.listen(PORT, HOST, () => {
   console.log(`Goofy Duel running on port ${PORT}`);

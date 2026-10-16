@@ -534,7 +534,7 @@ export function newRoom(name) {
 const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
 export function snapshotPlayer(p) {
   return {
-    id: p.id, name: p.name, x: r3(p.x), y: r3(p.y), z: r3(p.z), yaw: r3(p.yaw), pitch: r2(p.pitch),
+    id: p.id, name: p.name, x: r3(p.x), y: r3(p.y), z: r3(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz), yaw: r3(p.yaw), pitch: r2(p.pitch),
     onGround: p.onGround, gdir: p.gdir, state: p.state, sdir: p.sdir, st: r3(p.st), saim: Math.round(p.saim), recDur: p.recDur,
     heavy: p.heavy, blocking: p.blocking, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless,
