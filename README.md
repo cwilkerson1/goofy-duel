@@ -98,13 +98,13 @@ opponent's are revealed when it stops, and the fight begins.
 |---|---|
 | 🗡️ Longsword | The baseline: reach and speed in balance |
 | ⚔️ Greatsword | Two-handed. Huge reach and damage, slow, cheap to block with |
-| 🔪 Rondel Dagger | Very fast, very short, weak blocks |
+| 🔪 Rondel Dagger | Very fast, very short, weak blocks. A stabbing weapon, so it rarely takes limbs |
 | 🪓 Battle Axe | Very good at taking arms and legs off |
 | 🔨 War Hammer | Two-handed. Every hit dazes and shoves; bad at severing |
-| 🔱 Spear | Two-handed. The longest reach in the game |
+| 🔱 Spear | Two-handed. The longest reach in the game; deadly thrusts, but it rarely takes limbs |
 | 💀 War Scythe | Two-handed. Long, slow, and the best limb remover after Excalibur |
 | 🗡️ Arming Sword | A short one-handed sword: quick and light, a little less reach and damage than the longsword |
-| ⚒️ Flanged Mace | One-handed and blunt. Dazes and shoves on hit |
+| ⚒️ Flanged Mace | One-handed and blunt. Built to beat armour: hits hard, dazes and shoves |
 | ⛓️ Flail | Blunt, with a spiked ball on a chain. Hits hard and knocks people back, but it's poor for blocking |
 | ⛏️ War Pick | A long spike that punches through armour; small sweet spot, big damage |
 | 👊 Bare Fists | No weapon this round. Tiny reach, fast. Comes with a sad trombone |
