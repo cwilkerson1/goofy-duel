@@ -1,5 +1,5 @@
 // Client-side prediction of your own movement. Kept apart from client.js so it can be tested in Node.
-import { ARENA_R, forward, rightOf, isHeavy, legsLeft, wpn, COST } from './sim.js';
+import { ARENA_R, legsLeft, COST, moveGoal, ACCEL, STRIDE } from './sim.js';
 
 // Your knight moves on your screen the moment you press a key, using the same movement rules as the
 // server, and quietly eases toward where the server says you are. So your own view never waits on
@@ -26,17 +26,10 @@ export function makePredictor() {
   step(s, opp, inp, dt, now) {
     if (!this.on || !s) return;
     const legs = legsLeft(s);
-    let speed = (legs === 2 ? 4 : legs === 1 ? 2.6 : 1.1) * wpn(s).move;
-    const blocking = inp.b && s.state === 'idle' && s.stun <= 0;
-    if (s.state === 'hold') speed *= isHeavy(s) ? 0.45 : 0.65;
-    else if (s.state !== 'idle' || blocking) speed *= 0.5;
-    if (s.stun > 0) speed = 0;
-    const f = forward(inp.yaw), r = rightOf(inp.yaw), mf = inp.mf, ms = inp.ms;
-    let mx = f[0] * mf + r[0] * ms, mz = f[2] * mf + r[2] * ms;
-    const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
-    const accel = this.onGround ? 12 : 3;
-    this.vx += (mx * speed - this.vx) * Math.min(1, accel * dt);
-    this.vz += (mz * speed - this.vz) * Math.min(1, accel * dt);
+    const goal = moveGoal(s, inp.mf, inp.ms, inp.yaw, inp.b && s.state === 'idle' && s.stun <= 0), ml = goal.moving ? 1 : 0;
+    const accel = this.onGround ? ACCEL : 2;
+    this.vx += (goal.vx - this.vx) * Math.min(1, accel * dt);
+    this.vz += (goal.vz - this.vz) * Math.min(1, accel * dt);
     if (this.onGround && legs && inp.j && s.stun <= 0 && s.stam >= COST.jump) { this.vy = legs === 2 ? 5.2 : 4; this.onGround = false; }
     else if (this.onGround && legs === 1 && ml > 0.1 && s.state !== 'kick') { this.vy = 2.6; this.onGround = false; }
     this.vy -= 14 * dt;
@@ -53,7 +46,7 @@ export function makePredictor() {
       const dx = this.x - opp.x, dz = this.z - opp.z, dd = Math.hypot(dx, dz) || 1e-3;
       if (dd < 0.75) { const push = (0.75 - dd) / 2; this.x += (dx / dd) * push; this.z += (dz / dd) * push; }
     }
-    if (this.onGround) this.walk += Math.hypot(this.vx, this.vz) * dt * 2.6;
+    if (this.onGround) this.walk += Math.hypot(this.vx, this.vz) * dt * STRIDE;
     this.hist.push({ t: now, x: this.x, y: this.y, z: this.z });
     while (this.hist.length && this.hist[0].t < now - 1000) this.hist.shift();
   },

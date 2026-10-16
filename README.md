@@ -76,6 +76,9 @@ block) just as theirs is about to land. Their swing is cancelled and yours keeps
 **Stamina** (the yellow bar) is spent by swings, heavies, kicks, feints, jumps and absorbing blocks. If you
 block with too little stamina, your guard breaks and the hit lands anyway.
 
+**Footwork.** Knights in armour walk at a steady pace, back off slower than they advance, and take a
+moment to get going and to stop. You see and hear every step, and your weapon sways with your stride.
+
 **Momentum** matters. Stepping into your swing hits harder, and backing away from theirs softens it.
 
 **Where swings land.** Overheads come down on heads (two clean ones take a head off). Side swings

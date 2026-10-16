@@ -115,6 +115,20 @@ export const legsLeft = (p) => (p.parts.legR.cut ? 0 : 1) + (p.parts.legL.cut ? 
 export const swordArm = (p) => (!p.parts.armR.cut ? 'armR' : !p.parts.armL.cut ? 'armL' : null);
 export const forward = (yaw) => [-Math.sin(yaw), 0, -Math.cos(yaw)];
 export const rightOf = (yaw) => [Math.cos(yaw), 0, -Math.sin(yaw)];
+// Footwork. A knight in armour walks at a brisk 2.8 m/s, backs off slower and sidesteps a bit slower,
+// and takes a moment to get going or stop. Used by the server and by your browser's prediction.
+export const WALK_SPEED = 2.8, ACCEL = 8, STRIDE = 3;
+export function moveGoal(p, mf, ms, yaw, blocking) {
+  const legs = legsLeft(p);
+  let speed = (legs === 2 ? WALK_SPEED : legs === 1 ? 2 : 0.9) * wpn(p).move;
+  if (p.state === 'hold') speed *= isHeavy(p) ? 0.45 : 0.65;
+  else if (p.state !== 'idle' || blocking) speed *= 0.5;
+  if (p.stun > 0) speed = 0;
+  const f = forward(yaw), r = rightOf(yaw), fw = mf > 0 ? mf : mf * 0.65, sd = ms * 0.8;
+  let mx = f[0] * fw + r[0] * sd, mz = f[2] * fw + r[2] * sd;
+  const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+  return { vx: mx * speed, vz: mz * speed, moving: ml > 0.1 };
+}
 export const isHeavy = (p) => (p.state === 'hold' && p.st >= tm(p, 'HEAVY_AT')) || (p.state === 'active' && p.heavy);
 // How far up/down a side slash is aimed, from the head pitch in degrees.
 const slashTilt = (p, deg) => (p.sdir === 'over' ? 0 : clamp(deg, -45, 25) * 0.9);
@@ -139,7 +153,7 @@ export function swordLocal(p) {
   const s = SWING[p.sdir];
   if (p.state === 'hold') {
     const k = ease(clamp(p.st / tm(p, 'DRAW'), 0, 1));
-    return mix(guardPose(), swingPose(s.wa, s.wp + slashTilt(p, p.pitch / D2R)), k);
+    return mix(guardPose(p), swingPose(s.wa, s.wp + slashTilt(p, p.pitch / D2R)), k);
   }
   const tilt = slashTilt(p, p.saim);
   if (p.state === 'active') {
@@ -148,11 +162,22 @@ export function swordLocal(p) {
   }
   if (p.state === 'recover') {
     const k = ease(clamp(p.st / p.recDur, 0, 1));
-    return mix(swingPose(s.a[1], s.p[1] + tilt), guardPose(), k);
+    return mix(swingPose(s.a[1], s.p[1] + tilt), guardPose(p), k);
   }
-  return guardPose();
+  return guardPose(p);
 }
-const guardPose = () => ({ hand: GUARD[0], dir: norm(GUARD[1]) });
+// The weapon isn't frozen in place at guard: it rocks with each step (slightly behind the body, so it
+// swings rather than riding along), breathes when you stand still, and lags a touch when you turn.
+// p.breath and p.lag are only set in the browser, for looks.
+function guardPose(p) {
+  const k = gait(p), w = p.walk || 0, br = p.breath || 0, lag = p.lag || 0;
+  const hand = [GUARD[0][0] - 0.03 * k * (1 - Math.cos(2 * w)), GUARD[0][1] + 0.03 * k * Math.sin(w + 0.6) + lag * 0.5,
+    GUARD[0][2] + 0.035 * k * Math.sin(2 * w + 1.2) + 0.008 * Math.sin(br * 1.6)];
+  const dir = [GUARD[1][0], GUARD[1][1] + 0.12 * k * Math.sin(w + 0.3) + lag, GUARD[1][2] + 0.06 * k * Math.cos(2 * w) + 0.02 * Math.sin(br * 1.6 + 0.5)];
+  return { hand, dir: norm(dir) };
+}
+// 0 standing still, 1 at full walking pace.
+const gait = (p) => (p.onGround === false ? 0 : clamp(Math.hypot(p.vx || 0, p.vz || 0) / (WALK_SPEED * 0.85), 0, 1));
 // Swings pivot around the right shoulder (0.2 right, 0.06 below the neck).
 function swingPose(a, pp) { const d = bladeDir(a, pp); return { hand: [d[0] * ARM, d[1] * ARM + 0.2, d[2] * ARM - 0.06], dir: d }; }
 function mix(A, B, k) { return { hand: A.hand.map((v, i) => lerp(v, B.hand[i], k)), dir: norm(A.dir.map((v, i) => lerp(v, B.dir[i], k))) }; }
@@ -164,16 +189,22 @@ export function skeleton(p) {
   const dirW = (d) => [f[0] * d[0] + r[0] * d[1], d[2], f[2] * d[0] + r[2] * d[1]];
   const base = [p.x, p.y, p.z];
   const legs = legsLeft(p);
-  const lean = p.state === 'active' ? (p.sdir === 'over' ? 0.12 : 0.06) : p.state === 'hold' ? -0.04 : 0;
-  const hipH = legs ? LEG : 0.22;
-  const hip = L(base, 0, 0, hipH);
-  const neck = L(base, lean, 0, hipH + TORSO);
-  const head = L(base, lean * 1.2, 0, hipH + TORSO + HEAD_R + 0.06);
+  // Walking: feet stride along the direction of travel and lift as they swing through, the body rises
+  // over each planted foot and dips between steps, and shifts a little over whichever leg is down.
+  const k = legs === 2 ? gait(p) : 0, w = p.walk || 0;
+  const sp = Math.hypot(p.vx || 0, p.vz || 0), vF = sp > 0.1 ? ((p.vx || 0) * f[0] + (p.vz || 0) * f[2]) / sp : 1, vR = sp > 0.1 ? ((p.vx || 0) * r[0] + (p.vz || 0) * r[2]) / sp : 0;
+  const bob = 0.03 * k * Math.cos(2 * w), shift = -0.025 * k * Math.cos(w);
+  const lean = (p.state === 'active' ? (p.sdir === 'over' ? 0.12 : 0.06) : p.state === 'hold' ? -0.04 : 0) + 0.04 * k * vF;
+  const hipH = (legs ? LEG : 0.22) + bob;
+  const hip = L(base, 0, shift, hipH);
+  const neck = L(base, lean, shift * 0.6, hipH + TORSO);
+  const head = L(base, lean * 1.2, shift * 0.5, hipH + TORSO + HEAD_R + 0.06);
   const shR = L(neck, 0, 0.2, -0.06), shL = L(neck, 0, -0.2, -0.06);
 
-  const sw = Math.sin(p.walk) * 0.28, air = p.onGround ? 0 : 1;
-  let footR = L(base, sw * (1 - air) + 0.15 * air, 0.12, 0.25 * air);
-  const footL = L(base, -sw * (1 - air) - 0.05 * air, -0.12, 0.12 * air);
+  const sw = Math.sin(w) * 0.3 * k, air = p.onGround ? 0 : 1;
+  const liftR = Math.max(0, Math.cos(w)) * 0.14 * k, liftL = Math.max(0, -Math.cos(w)) * 0.14 * k;
+  let footR = L(base, sw * vF * (1 - air) + 0.15 * air, 0.12 + sw * vR, liftR + 0.25 * air);
+  const footL = L(base, -sw * vF * (1 - air) - 0.05 * air, -0.12 - sw * vR, liftL + 0.12 * air);
   // Kick: the right leg (or the left one if that's all that's left) shoots forward.
   const kickK = p.state === 'kick' ? Math.sin(clamp(p.st / T.KICK, 0, 1) * Math.PI) : 0;
   const kickFoot = L(base, 1.05 * kickK, 0.05, hipH * kickK);
@@ -200,7 +231,7 @@ export function skeleton(p) {
     var wdir = d, wedge = norm(e);
   }
   // The free arm flails goofily.
-  const fl = Math.sin(p.walk * 1.3 + 1) * 0.25 + (p.stun > 0 ? Math.sin(p.stun * 30) * 0.4 : 0);
+  const fl = -Math.sin(w) * 0.22 * k + Math.sin(w * 1.3 + 1) * 0.08 * (1 - k) + (p.stun > 0 ? Math.sin(p.stun * 30) * 0.4 : 0);
   const freeHand = (side) => L(neck, 0.15 + fl, side * 0.32, -0.55 + Math.abs(fl) * 0.3);
   const handR = holder === 'armR' ? hand : freeHand(1);
   // Two-handed weapons: the left hand grips further down the handle.
@@ -383,16 +414,10 @@ function stepPlayer(room, p, dt) {
     else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * dt);
 
     const legs = legsLeft(p);
-    let speed = (legs === 2 ? 4 : legs === 1 ? 2.6 : 1.1) * wpn(p).move;
-    if (p.state === 'hold') speed *= isHeavy(p) ? 0.45 : 0.65;
-    else if (p.state !== 'idle' || p.blocking) speed *= 0.5;
-    if (p.stun > 0) speed = 0;
-    const f = forward(p.yaw), r = rightOf(p.yaw);
-    let mx = f[0] * p.input.mf + r[0] * p.input.ms, mz = f[2] * p.input.mf + r[2] * p.input.ms;
-    const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
-    const accel = p.onGround ? 12 : 3;
-    p.vx += (mx * speed - p.vx) * Math.min(1, accel * dt);
-    p.vz += (mz * speed - p.vz) * Math.min(1, accel * dt);
+    const goal = moveGoal(p, p.input.mf, p.input.ms, p.yaw, p.blocking), ml = goal.moving ? 1 : 0;
+    const accel = p.onGround ? ACCEL : 2;
+    p.vx += (goal.vx - p.vx) * Math.min(1, accel * dt);
+    p.vz += (goal.vz - p.vz) * Math.min(1, accel * dt);
     if (p.onGround && legs && p.input.j && p.stun <= 0 && p.stam >= COST.jump) {
       p.vy = legs === 2 ? 5.2 : 4; p.onGround = false; spend(p, COST.jump);
       room.events.push({ t: 'jump', id: p.id });
@@ -409,7 +434,7 @@ function stepPlayer(room, p, dt) {
   if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
   const d = Math.hypot(p.x, p.z), maxR = ARENA_R - 0.5;
   if (d > maxR) { p.x *= maxR / d; p.z *= maxR / d; }
-  if (p.onGround) p.walk += Math.hypot(p.vx, p.vz) * dt * 2.6;
+  if (p.onGround) p.walk += Math.hypot(p.vx, p.vz) * dt * STRIDE;
 }
 
 function facing(def, att) {

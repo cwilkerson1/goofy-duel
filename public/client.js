@@ -905,6 +905,8 @@ const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 const keys = new Set();
 const look = { yaw: 0, pitch: 0 };
 const flick = { x: 0, y: 0 };
+// The weapon trails a little behind when you turn, then settles.
+let turnPush = 0, turnLag = 0;
 let atkHeld = false, blockHeld = false, dir = 'right';
 const locked = () => document.pointerLockElement === glCanvas;
 function lockPointer() { try { const r = glCanvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} }
@@ -925,7 +927,7 @@ addEventListener('mousemove', (e) => {
   if (!locked()) return;
   // The camera turns slower while you're drawing or blocking, so steering the weapon doesn't spin you around.
   const s = (atkHeld || isBlocking() ? 0.0011 : 0.0023) * S.sens;
-  look.yaw -= e.movementX * s;
+  look.yaw -= e.movementX * s; turnPush += e.movementX * s;
   look.pitch = Math.max(-1.3, Math.min(1.3, look.pitch - e.movementY * s));
   flick.x += e.movementX; flick.y += e.movementY;
   const ax = Math.abs(flick.x), ay = Math.abs(flick.y);
@@ -1255,6 +1257,17 @@ function swingFeel(W) {
   return bits.length ? bits.join(' · ') : 'balanced all round';
 }
 
+// ---------- footsteps ----------
+// One step sound each time a foot comes down (twice per stride), quieter for the other knight far away.
+const stepPhase = new Map();
+function footsteps(p, isMe) {
+  const n = Math.floor((p.walk || 0) / Math.PI), last = stepPhase.get(p.id);
+  stepPhase.set(p.id, n);
+  if (last === undefined || n === last || p.dead || !p.onGround || Math.hypot(p.vx || 0, p.vz || 0) < 0.6) return;
+  const d = isMe ? 0 : Math.hypot(p.x - camera.position.x, p.z - camera.position.z);
+  audio.step(isMe ? 0.12 : Math.max(0.02, 0.14 / (1 + d * 0.35)));
+}
+
 // ---------- main loop ----------
 let last = performance.now(), clock = 0, lastPhase = '';
 function frame(now) {
@@ -1264,7 +1277,7 @@ function frame(now) {
   const opp = players.find((p) => p && p.id !== myId) || null;
   if (me && pred.on && !me.dead) {
     pred.step(cur.players.find((p) => p && p.id === myId), opp, { mf: moveFwd(), ms: moveSide(), j: keys.has('Space'), b: isBlocking(), yaw: look.yaw }, dt, now);
-    me = { ...me, x: pred.x, y: pred.y, z: pred.z, walk: pred.walk, onGround: pred.onGround };
+    me = { ...me, x: pred.x, y: pred.y, z: pred.z, vx: pred.vx, vz: pred.vz, walk: pred.walk, onGround: pred.onGround };
     players[players.findIndex((p) => p && p.id === myId)] = me;
   }
   if (cur && cur.phase !== lastPhase) {
@@ -1275,6 +1288,7 @@ function frame(now) {
   music.step(dt);
   fightFlash = Math.max(0, fightFlash - dt); qualityToast = Math.max(0, qualityToast - dt);
   if (me) sendInput(dt);
+  turnLag += (Math.max(-0.12, Math.min(0.12, -turnPush * 1.5)) - turnLag) * Math.min(1, dt * 10); turnPush = 0;
 
   // Sync knight meshes with the players in the arena.
   const ids = new Set(players.filter(Boolean).map((p) => p.id));
@@ -1285,7 +1299,8 @@ function frame(now) {
     if (!k || k.color !== p.color) { if (k) k.dispose(); k = new Knight(p.color); knights.set(p.id, k); }
     const isMe = p.id === myId;
     // Use the local mouse look for our own body so the sword follows the camera instantly.
-    const pose = isMe && !p.dead ? { ...p, yaw: look.yaw, pitch: look.pitch } : p;
+    const pose = isMe && !p.dead ? { ...p, yaw: look.yaw, pitch: look.pitch, breath: clock, lag: turnLag } : { ...p, breath: clock + p.id * 1.7 };
+    footsteps(p, isMe);
     k.update(pose, skeleton(pose), isMe && !p.dead);
   }
 
@@ -1293,7 +1308,9 @@ function frame(now) {
   if (me && !me.dead) {
     const sk = skeleton({ ...me, yaw: look.yaw });
     camera.position.set(sk.head[0], sk.head[1] + 0.02, sk.head[2]);
-    camera.rotation.set(look.pitch, look.yaw, 0);
+    // A slight roll with each step, so walking feels like walking.
+    const gk = me.onGround ? Math.min(1, Math.hypot(me.vx || 0, me.vz || 0) / 2.4) : 0;
+    camera.rotation.set(look.pitch, look.yaw, 0.012 * gk * Math.sin(me.walk || 0));
   } else if (me && myHeadGib) {
     // Your head is the camera now. Enjoy the ride.
     camera.position.copy(myHeadGib.g.position);
@@ -1310,6 +1327,7 @@ function frame(now) {
     camera.lookAt(fs.length ? fs.reduce((s, p) => s + p.x, 0) / fs.length : 0, 1, fs.length ? fs.reduce((s, p) => s + p.z, 0) / fs.length : 0);
   }
   if (shake > 0) { camera.position.x += rnd(-shake, shake); camera.position.y += rnd(-shake, shake); shake = Math.max(0, shake - dt * 0.4); }
+  if (debugCam) { camera.position.set(...debugCam.pos); camera.lookAt(...debugCam.at); } // ?debug only: a free camera for screenshots
   hurtFlash = Math.max(0, hurtFlash - dt * 1.5);
 
   blood.step(dt); stepGibs(dt); sparks.step(dt); updateCrowd(clock, dt); wheel.step(dt);
@@ -1362,6 +1380,13 @@ const audio = {
     if (!this.ok()) return; const t = this.ctx.currentTime, n = this.noise(0.25), f = this.ctx.createBiquadFilter();
     f.type = 'bandpass'; f.Q.value = 2; f.frequency.setValueAtTime(dir === 'low' ? 400 : 900, t); f.frequency.exponentialRampToValueAtTime(dir === 'over' ? 300 : 2500, t + 0.2);
     n.connect(f); this.env(f, t, 0.03, 0.2, 0.25); n.start(t);
+  },
+  step(vol) {
+    if (!this.ok()) return; const t = this.ctx.currentTime, n = this.noise(0.12), f = this.ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.value = 500 + Math.random() * 300; n.connect(f); this.env(f, t, 0.004, 0.09, vol); n.start(t);
+    const o = this.ctx.createOscillator(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.08); this.env(o, t, 0.003, 0.08, vol * 0.8); o.start(t); o.stop(t + 0.12);
+    // a faint clink of armour
+    const c = this.ctx.createOscillator(); c.type = 'triangle'; c.frequency.value = 2400 + Math.random() * 900; this.env(c, t + 0.01, 0.002, 0.06, vol * 0.12); c.start(t + 0.01); c.stop(t + 0.1);
   },
   thud() {
     if (!this.ok()) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator();
@@ -1429,4 +1454,5 @@ const audio = {
 };
 
 // For automated testing: ?debug exposes a couple of hooks.
-if (params.has('debug')) window.duel = {  send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+let debugCam = null;
+if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
