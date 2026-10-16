@@ -1304,7 +1304,7 @@ function frame(now) {
   if (me && !debugPose) { me = predictMyAction(me, now); players[players.findIndex((p) => p && p.id === myId)] = me; }
   if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
   if (cur && cur.phase !== lastPhase) {
-    if (cur.phase === 'fight') { fightFlash = 1; music.start(); }
+    if (cur.phase === 'fight') { fightFlash = 1; music.start(cur.song); }
     if (cur.phase === 'over') { matchOverAt = performance.now(); setTimeout(() => { if (cur && cur.phase === 'over') $('menuLeave').onclick(); }, MATCH_OVER_WAIT); }
     else music.stop();
     lastPhase = cur.phase;
@@ -1380,11 +1380,13 @@ const music = (() => {
   const VOL = 0.45;
   fetch('/music.json').then((r) => r.json()).then((list) => { tracks = list; }).catch(() => {});
   return {
-    start() {
+    // The server rolls a number each round, so both fighters (and anyone watching) hear the same
+    // track. It's a different one from last fight whenever there's more than one.
+    start(song) {
       if (!tracks.length) return;
-      // A different track each fight when there's more than one.
-      const choices = tracks.length > 1 ? tracks.filter((t) => t !== lastTrack) : tracks;
-      const t = choices[(Math.random() * choices.length) | 0];
+      let i = Number.isFinite(song) ? song % tracks.length : (Math.random() * tracks.length) | 0;
+      if (tracks.length > 1 && tracks[i] === lastTrack) i = (i + 1) % tracks.length;
+      const t = tracks[i];
       if (!el || lastTrack !== t) { if (el) el.pause(); el = new Audio(t); el.loop = true; el.volume = 0; lastTrack = t; }
       else el.currentTime = 0;
       el.play().catch(() => {});

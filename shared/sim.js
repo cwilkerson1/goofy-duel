@@ -661,6 +661,7 @@ function startRound(room, resetScores) {
   const result = {};
   room.fighters.forEach((p) => { if (p) { p.weapon = WEAPONS[room.forceWeapon] ? room.forceWeapon : rollWeapon(); result[p.id] = p.weapon; } });
   room.phase = 'spin'; room.timer = SPIN_TIME; room.msg = 'Spinning the Wheel of Weapons…';
+  room.song = Math.floor(Math.random() * 1e9); // everyone's browser plays the same fight track from this
   room.events.push({ t: 'round' }, { t: 'spin', result, dur: SPIN_TIME });
 }
 

@@ -183,7 +183,7 @@ function tick() {
     stepRoom(room, TICK);
     if (frame % SEND_EVERY) continue;
     const msg = JSON.stringify({
-      t: 's', n: frame, phase: room.phase, msg: room.msg, timer: Math.max(0, Math.round(room.timer * 10) / 10),
+      t: 's', n: frame, phase: room.phase, msg: room.msg, song: room.song, timer: Math.max(0, Math.round(room.timer * 10) / 10),
       players: room.fighters.map((p) => (p ? snapshotPlayer(p) : null)),
       ev: room.events, spectators: room.clients.size - room.fighters.filter(Boolean).length,
     });
