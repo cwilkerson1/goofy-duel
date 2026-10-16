@@ -909,6 +909,8 @@ let atkHeld = false, blockHeld = false, dir = 'right';
 const locked = () => document.pointerLockElement === glCanvas;
 function lockPointer() { try { const r = glCanvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} }
 addEventListener('keydown', (e) => {
+  // Esc normally just frees the mouse (which opens the menu); if the mouse wasn't captured, it toggles the menu.
+  if (e.code === 'Escape' && !locked()) { if (menu.isOpen()) { if (!joined) menu.close(); } else menu.open(); return; }
   if (e.target.tagName === 'INPUT' || menu.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;

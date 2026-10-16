@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick } from './shared/sim.js';
 
@@ -18,6 +19,16 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const MUSIC_DIR = path.join(ROOT, 'public', 'music');
 const isAudio = (f) => /\.(mp3|ogg|wav|m4a|aac|flac|webm)$/i.test(f);
 
+// The game's version: the git commit it's running, or the time the game code last changed.
+let ver = { at: 0, v: '' };
+function version() {
+  if (Date.now() - ver.at < 5000) return ver.v;
+  let v = '';
+  try { v = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch {}
+  if (!v) try { v = String(Math.round(fs.statSync(path.join(ROOT, 'public', 'client.js')).mtimeMs)); } catch {}
+  ver = { at: Date.now(), v };
+  return v;
+}
 const server = http.createServer((req, res) => {
   let url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (url === '/') url = '/index.html';
@@ -35,6 +46,19 @@ const server = http.createServer((req, res) => {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404).end('not found'); return; }
     const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    // Game code is never cached, so a refresh always picks up an update. The page also stamps the
+    // script address with the current version, and shows that version on the start screen.
+    if (/\.(html|js|css|json)$/.test(file)) {
+      if (file.endsWith('index.html')) {
+        const v = version();
+        const html = fs.readFileSync(file, 'utf8').replace('/client.js"', `/client.js?v=${v}"`).replace('__VERSION__', v);
+        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' }).end(html);
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': type, 'Content-Length': st.size, 'Cache-Control': 'no-store' });
+      fs.createReadStream(file).pipe(res);
+      return;
+    }
     // Byte ranges let browsers (Safari especially) stream and loop music files.
     const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
     if (range && (range[1] || range[2])) {
