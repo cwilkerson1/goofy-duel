@@ -366,7 +366,7 @@ function buildArena() {
 
   // Tombstones leaning against the wall, with the odd pumpkin.
   const stoneMat = pbrMat(TEX.granite);
-  const epitaphs = ['R.I.P.', 'Sir Lost-a-Leg', 'Should have blocked', 'Here lies a head', 'Fists. Again.', 'Hit by trout'];
+  const epitaphs = ['R.I.P.', 'Sir Lost-a-Leg', 'Should have blocked', 'Here lies a head', 'Fists. Again.', 'Felled by a flail'];
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * Math.PI * 2 + rnd(-0.08, 0.08);
     if (Math.abs(Math.cos(a)) < 0.2) continue; // keep the gates clear
@@ -575,30 +575,34 @@ function makeWeapon(id) {
       glow = std(0xbfc6cc, { metalness: 0.8, roughness: 0.3 }); add(cyl(0.022, L + 0.5), std(0x3a2a1a), L / 2 - 0.25);
       const b = add(box(0.55, 0.06, 0.012), glow, L - 0.05, 0.26); b.rotation.z = -0.25; break;
     }
-    case 'chicken': {
-      glow = std(0xffd23f, { roughness: 0.7 });
-      const body = add(new THREE.SphereGeometry(0.1, 14, 10), glow, L * 0.55); body.scale.set(0.8, 2.6, 0.9);
-      add(new THREE.SphereGeometry(0.06, 12, 8), glow, L * 0.55 + 0.3);
-      add(box(0.02, 0.07, 0.06), std(0xe0302e), L * 0.55 + 0.37);
-      const beak = add(new THREE.ConeGeometry(0.02, 0.06, 6), std(0xff8c1a), L * 0.55 + 0.3, 0, -0.07); beak.rotation.x = -Math.PI / 2;
-      add(cyl(0.012, 0.2), std(0xff8c1a), 0.02, 0.025); add(cyl(0.012, 0.2), std(0xff8c1a), 0.02, -0.025);
+    case 'arming': glow = steel(); add(blade(0.045, L, 0.008), glow, 0.03); add(guard(0.18), MAT.steel, 0.01); grip(); break;
+    case 'mace': {
+      // Steel haft with a leather grip, and a head of six flanges around a core.
+      glow = pbrMat(TEX.steel, { metalness: 0.9, color: 0xb8bec6 });
+      add(cyl(0.017, 0.62), MAT.darkSteel, 0.24); add(cyl(0.022, 0.17), MAT.grip, 0.01); add(new THREE.SphereGeometry(0.03, 10, 8), MAT.steel, -0.08);
+      add(cyl(0.034, 0.16), glow, L - 0.08);
+      for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2, f = add(box(0.05, 0.15, 0.012), glow, L - 0.08, Math.cos(a) * 0.045, Math.sin(a) * 0.045); f.rotation.y = -a; }
+      add(new THREE.SphereGeometry(0.022, 10, 8), glow, L);
       break;
     }
-    case 'baguette': {
-      glow = std(0xd9a35b, { roughness: 0.9 }); add(new THREE.CapsuleGeometry(0.045, L, 6, 12), glow, L / 2 - 0.05);
-      for (let k = 1; k < 5; k++) { const c = add(box(0.06, 0.012, 0.02), std(0xf3d9a6), (L * k) / 5, 0, -0.042); c.rotation.z = 0.5; }
+    case 'flail': {
+      // Wooden handle, a short chain, and a spiked iron ball. The chain is drawn taut, as if swung.
+      glow = pbrMat(TEX.steel, { metalness: 0.85, color: 0x9a9fa6 });
+      add(cyl(0.022, 0.42), MAT.wood, 0.15); add(cyl(0.026, 0.05), MAT.darkSteel, 0.36);
+      for (let k = 0; k < 6; k++) { const l = add(new THREE.TorusGeometry(0.018, 0.005, 5, 10), MAT.darkSteel, 0.41 + k * 0.06); l.rotation.y = (k % 2) * Math.PI / 2; }
+      add(new THREE.SphereGeometry(0.058, 16, 12), glow, 0.83);
+      for (let k = 0; k < 10; k++) {
+        const u = new THREE.Vector3(Math.sin(k * 2.4) * Math.sqrt(1 - ((k + 0.5) / 5 - 1) ** 2), (k + 0.5) / 5 - 1, Math.cos(k * 2.4) * Math.sqrt(1 - ((k + 0.5) / 5 - 1) ** 2)).normalize();
+        const c = add(new THREE.ConeGeometry(0.012, 0.045, 5), glow, 0.83 + u.y * 0.075, u.x * 0.075, u.z * 0.075); c.quaternion.setFromUnitVectors(UP, u);
+      }
       break;
     }
-    case 'trout': {
-      glow = std(0x7fb3a6, { roughness: 0.35, metalness: 0.3 });
-      const body = add(new THREE.SphereGeometry(0.1, 14, 10), glow, L * 0.55); body.scale.set(0.55, 3, 1.1);
-      const tail = add(new THREE.ConeGeometry(0.08, 0.12, 4), glow, 0.04); tail.rotation.x = Math.PI;
-      add(new THREE.SphereGeometry(0.015, 6, 4), MAT.eye, L * 0.55 + 0.22, 0.05, -0.03); add(new THREE.SphereGeometry(0.015, 6, 4), MAT.eye, L * 0.55 + 0.22, -0.05, -0.03);
-      break;
-    }
-    case 'pan': {
-      glow = std(0x2a2a2a, { metalness: 0.7, roughness: 0.4 }); add(cyl(0.02, 0.32), std(0x111111), 0.12);
-      const disc = add(new THREE.CylinderGeometry(0.17, 0.15, 0.04, 20), glow, L - 0.12); disc.rotation.z = Math.PI / 2; // flat face toward the target
+    case 'pick': {
+      // A war hammer's cousin: a long spike on the striking side and a small hammer face behind it.
+      glow = steel();
+      add(cyl(0.022, L + 0.15), MAT.wood, L / 2 - 0.1); add(box(0.06, 0.09, 0.05), MAT.darkSteel, L - 0.07);
+      const spike = add(new THREE.ConeGeometry(0.026, 0.2, 6), glow, L - 0.07, 0.12); spike.rotation.z = -Math.PI / 2;
+      const face = add(cyl(0.026, 0.06), MAT.darkSteel, L - 0.07, -0.06); face.rotation.z = Math.PI / 2;
       break;
     }
     case 'fists': glow = std(0xd8261f, { roughness: 0.4 }); add(new THREE.SphereGeometry(0.1, 14, 10), glow, 0.03).scale.set(1, 1.15, 1); break;
@@ -1015,7 +1019,6 @@ function handleEvent(ev) {
       // A sweet-spot hit sprays more and lands with a heavy thud; a handle or shaft hit barely bleeds.
       blood.burst(V(ev.pos), ev.zm >= 1.25 ? 45 : ev.zm < 0.6 ? 8 : 22, new THREE.Vector3(ev.dir[0], 0, ev.dir[1]), ev.zm >= 1.25 ? 1.3 : 1);
       audio.hitFor(ev.weapon); if (ev.zm >= 1.25) audio.thud();
-      if (ev.weapon === 'baguette') for (let k = 0; k < 25; k++) sparks.spawn(V(ev.pos));
       if (mine) { shake = ev.zm >= 1.25 ? 0.1 : 0.06; hurtFlash = ev.zm >= 1.25 ? 0.7 : 0.5; }
       crowd.cheer = Math.min(1, crowd.cheer + 0.25);
       break;
@@ -1468,15 +1471,14 @@ const audio = {
   reveal(id) {
     if (id === 'fists') this.notes([[392, 0, 0.35], [370, 0.4, 0.35], [349, 0.8, 0.35], [330, 1.2, 0.9, 300]], 'sawtooth', 0.06); // sad trombone
     else if (id === 'excalibur') this.notes([[523, 0, 0.12], [659, 0.12, 0.12], [784, 0.24, 0.12], [1047, 0.36, 0.5], [784, 0.9, 0.1], [1047, 1.0, 0.6]]);
-    else if (id === 'chicken') this.notes([[900, 0, 0.25, 1600], [1500, 0.3, 0.3, 700]], 'sine', 0.12);
     else this.horn();
     this.cheer();
   },
   hitFor(id) {
     if (!this.ok()) return;
-    if (id === 'chicken') this.notes([[700, 0, 0.18, 1800], [1700, 0.18, 0.2, 900]], 'sine', 0.15);
-    else if (id === 'pan') this.notes([[220, 0, 0.8], [331, 0, 0.8], [587, 0, 0.6]], 'triangle', 0.12);
-    else if (id === 'trout') { const t = this.ctx.currentTime, n = this.noise(0.12), f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 900; n.connect(f); this.env(f, t, 0.002, 0.1, 0.5); n.start(t); }
+    if (id === 'mace') { this.thud(); this.notes([[170, 0, 0.14, 90]], 'square', 0.07); }
+    else if (id === 'flail') { const t = this.ctx.currentTime, n = this.noise(0.18), f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3200; n.connect(f); this.env(f, t, 0.003, 0.16, 0.25); n.start(t); this.thud(); } // chain rattle
+    else if (id === 'pick') { this.thud(); this.notes([[880, 0, 0.07], [1320, 0, 0.05]], 'triangle', 0.08); } // a sharp bite into plate
     else if (id === 'hammer') { this.thud(); this.notes([[120, 0, 0.3, 60]], 'square', 0.1); }
     else this.thud();
   },

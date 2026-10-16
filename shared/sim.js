@@ -41,19 +41,19 @@ export const T = {
 // (heads only get a third of the sever bonus, so big blades don't one-shot every neck.)
 // stun: dazes whoever gets hit. block: stamina cost multiplier when blocking with it.
 export const WEAPONS = {
-  longsword:  { name: 'Trusty Longsword',  emoji: '🗡️', len: 0.95, dmg: 1,    sever: 1,   draw: 1, swing: 1, rec: 1, stam: 1, move: 1, knock: 1,   stun: 0,    block: 1,   weight: 1.2, color: '#9fb4c7', line: 'Reliable. Boring. Effective.' },
-  greatsword: { name: 'Absurd Greatsword', emoji: '⚔️', len: 1.35, dmg: 1.6, sever: 1.2, draw: 1.45, swing: 1.45, rec: 1.45, stam: 1.5, move: 0.85, two: true, grip: 0.17, knock: 1.7, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Compensating for something?' },
-  dagger:     { name: 'Pointy Dagger',     emoji: '🔪', len: 0.45, dmg: 0.7,  sever: 0.8, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Get close. Get stabby.' },
-  axe:        { name: 'Limb Collector',    emoji: '🪓', len: 0.85, dmg: 1.0, sever: 1.6, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Arms? Legs? Yes.' },
-  hammer:     { name: 'Bonk Hammer',       emoji: '🔨', len: 0.9,  dmg: 1.45,  sever: 0.6, draw: 1.5, swing: 1.35, rec: 1.2, stam: 1.35, move: 0.9, two: true, grip: 0.3, knock: 2.6, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
-  spear:      { name: 'Very Long Stick',   emoji: '🔱', len: 1.6,  dmg: 1.1,  sever: 0.8, draw: 1.0, swing: 1.05, rec: 1.3, stam: 0.9, move: 1, two: true, grip: 0.4, knock: 1.4, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Personal space: enforced.' },
-  scythe:     { name: 'Grim Scythe',       emoji: '💀', len: 1.3,  dmg: 1.3,  sever: 1.8, draw: 1.4, swing: 1.55, rec: 1.1, stam: 1.2, move: 0.9, two: true, grip: 0.4, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Harvest season.' },
-  chicken:    { name: 'Rubber Chicken',    emoji: '🐔', len: 0.7,  dmg: 0.5,  sever: 0.5, draw: 0.8, swing: 1.2, rec: 0.75, stam: 0.7, move: 1.05, knock: 4.5, stun: 0.3,  block: 1.2, weight: 1,   color: '#ffd23f', line: 'Low damage. Maximum disrespect.' },
-  baguette:   { name: 'Day-Old Baguette',  emoji: '🥖', len: 0.8,  dmg: 0.65, sever: 0.9, draw: 0.7, swing: 0.85, rec: 0.75, stam: 0.75, move: 1.05, knock: 1.2, stun: 0,    block: 1.1, weight: 1,   color: '#d9a35b', line: 'Hard enough to hurt. Crumbs everywhere.' },
-  trout:      { name: 'Slappy Trout',      emoji: '🐟', len: 0.75, dmg: 0.75,  sever: 0.6, draw: 0.95, swing: 1.1, rec: 0.9, stam: 0.85, move: 1, knock: 2.6, stun: 0.2,  block: 1.2, weight: 1,   color: '#7fb3a6', line: 'The ancient art of the fish slap.' },
-  pan:        { name: 'Frying Pan',        emoji: '🍳', len: 0.55, dmg: 0.9,  sever: 0.5, draw: 1.05, swing: 0.8, rec: 1, stam: 1, move: 1, knock: 1.6, stun: 0.7,  block: 0.4, weight: 1,   color: '#333333', line: 'BONG. Also a great shield.' },
-  fists:      { name: 'Bare Fists',        emoji: '👊', len: 0.15, dmg: 0.5,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'The wheel hates you.' },
-  excalibur:  { name: 'EXCALIBUR',         emoji: '✨', len: 1.1,  dmg: 1.4,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'JACKPOT! The legendary blade!' },
+  longsword:  { name: 'Longsword',         emoji: '🗡️', len: 0.95, dmg: 1,    sever: 1,   draw: 1, swing: 1, rec: 1, stam: 1, move: 1, knock: 1,   stun: 0,    block: 1,   weight: 1.2, color: '#9fb4c7', line: 'Reach and speed in balance.' },
+  greatsword: { name: 'Greatsword',        emoji: '⚔️', len: 1.35, dmg: 1.6, sever: 1.2, draw: 1.45, swing: 1.45, rec: 1.45, stam: 1.5, move: 0.85, two: true, grip: 0.17, knock: 1.7, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Two hands, huge arcs, huge hits.' },
+  dagger:     { name: 'Rondel Dagger',     emoji: '🔪', len: 0.45, dmg: 0.7,  sever: 0.8, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Tiny reach, lightning quick.' },
+  axe:        { name: 'Battle Axe',        emoji: '🪓', len: 0.85, dmg: 1.0, sever: 1.6, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Takes limbs off clean.' },
+  hammer:     { name: 'War Hammer',        emoji: '🔨', len: 0.9,  dmg: 1.45,  sever: 0.6, draw: 1.5, swing: 1.35, rec: 1.2, stam: 1.35, move: 0.9, two: true, grip: 0.3, knock: 2.6, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
+  spear:      { name: 'Spear',             emoji: '🔱', len: 1.6,  dmg: 1.1,  sever: 0.8, draw: 1.0, swing: 1.05, rec: 1.3, stam: 0.9, move: 1, two: true, grip: 0.4, knock: 1.4, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Keep them at the point.' },
+  scythe:     { name: 'War Scythe',        emoji: '💀', len: 1.3,  dmg: 1.3,  sever: 1.8, draw: 1.4, swing: 1.55, rec: 1.1, stam: 1.2, move: 0.9, two: true, grip: 0.4, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Strike with the heel of the blade.' },
+  arming:     { name: 'Arming Sword',      emoji: '🗡️', len: 0.78, dmg: 0.85, sever: 1,   draw: 0.75, swing: 0.85, rec: 0.8, stam: 0.8, move: 1.05, knock: 0.9, stun: 0,   block: 0.9, weight: 1,   color: '#b8c4d0', line: 'Short, light and quick.' },
+  mace:       { name: 'Flanged Mace',      emoji: '⚒️', len: 0.75, dmg: 1.05, sever: 0.6, draw: 1, swing: 1, rec: 1, stam: 1.05, move: 1, knock: 1.8, stun: 0.35, block: 1.1, weight: 1,   color: '#8a8f96', line: 'Dents helmets, rattles skulls.' },
+  flail:      { name: 'Flail',             emoji: '⛓️', len: 0.86, dmg: 1.15, sever: 0.7, draw: 1.1, swing: 1.25, rec: 1.1, stam: 1.15, move: 1, knock: 2.4, stun: 0.3,  block: 1.3, weight: 1,   color: '#6f6a64', line: 'Hard to block with, harder to be hit by.' },
+  pick:       { name: 'War Pick',          emoji: '⛏️', len: 0.8,  dmg: 1.1,  sever: 0.9, draw: 1.15, swing: 0.95, rec: 1.15, stam: 1.1, move: 0.95, knock: 1.2, stun: 0.25, block: 1, weight: 1,   color: '#5f6670', line: 'Punches straight through plate.' },
+  fists:      { name: 'Bare Fists',        emoji: '👊', len: 0.15, dmg: 0.5,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'No weapon this round. Good luck.' },
+  excalibur:  { name: 'Excalibur',         emoji: '✨', len: 1.1,  dmg: 1.4,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'Jackpot! The legendary blade.' },
 };
 export const WHEEL = Object.keys(WEAPONS); // slice order around the wheel
 
@@ -66,19 +66,20 @@ export const HITBOX = {
   greatsword: [Z(0, 0.03, 0, 0.5, 0.04, 0.6, 'near the hilt'), Z(0, 0.5, 0, 0.9, 0.04, 1), Z(0, 0.9, 0, 1.22, 0.04, 1.25, 'sweet spot'), Z(0, 1.22, 0, 1.38, 0.04, 1)],
   dagger:     [Z(0, 0.02, 0, 0.3, 0.025, 0.8), Z(0, 0.3, 0, 0.47, 0.025, 1.3, 'right in the point')],
   axe:        [Z(0, -0.1, 0, 0.64, 0.025, 0.35, 'just the handle'), Z(0.12, 0.71, 0.12, 0.79, 0.1, 1.4, 'axe head')],
-  hammer:     [Z(0, -0.08, 0, 0.74, 0.026, 0.3, 'just the handle'), Z(-0.075, 0.82, 0.075, 0.82, 0.077, 1.4, 'BONK')],
+  hammer:     [Z(0, -0.08, 0, 0.74, 0.026, 0.3, 'just the handle'), Z(-0.075, 0.82, 0.075, 0.82, 0.077, 1.4, 'hammer face')],
   spear:      [Z(0, -0.1, 0, 1.45, 0.022, 0.3, 'shaft poke'), Z(0, 1.46, 0, 1.71, 0.04, 1.4, 'spear tip')],
   // The scythe's sweet spot is the heel, the inner part of the blade next to the pole, where it's strongest.
   scythe:     [Z(0, -0.1, 0, 1.24, 0.024, 0.4, 'just the pole'), Z(0.01, 1.315, 0.16, 1.277, 0.05, 1.6, 'HEEL STRIKE'), Z(0.16, 1.277, 0.52, 1.186, 0.035, 1)],
-  chicken:    [Z(0, 0.14, 0, 0.64, 0.085, 1), Z(0, 0.66, 0, 0.72, 0.065, 1.25, 'beak first')],
-  baguette:   [Z(0, -0.05, 0, 0.5, 0.045, 0.9), Z(0, 0.5, 0, 0.8, 0.045, 1.15, 'crusty end')],
-  trout:      [Z(0, 0.1, 0, 0.5, 0.085, 1), Z(0, 0.5, 0, 0.7, 0.08, 1.25, 'face slap')],
-  pan:        [Z(0, -0.04, 0, 0.27, 0.02, 0.4, 'just the handle'), Z(0, 0.4, 0, 0.46, 0.14, 1.35, 'BONG')],
+  arming:     [Z(0, 0.03, 0, 0.28, 0.028, 0.6, 'near the hilt'), Z(0, 0.28, 0, 0.5, 0.028, 1), Z(0, 0.5, 0, 0.7, 0.028, 1.25, 'sweet spot'), Z(0, 0.7, 0, 0.81, 0.028, 1)],
+  mace:       [Z(0, -0.08, 0, 0.58, 0.02, 0.35, 'just the haft'), Z(0, 0.6, 0, 0.76, 0.075, 1.35, 'flanged head')],
+  // The flail's chain is drawn straight out along the swing, with the spiked ball at the end.
+  flail:      [Z(0, -0.05, 0, 0.36, 0.022, 0.3, 'just the handle'), Z(0, 0.38, 0, 0.74, 0.02, 0.6, 'the chain'), Z(0, 0.79, 0, 0.87, 0.08, 1.45, 'spiked ball')],
+  pick:       [Z(0, -0.1, 0, 0.7, 0.024, 0.35, 'just the handle'), Z(0.03, 0.74, 0.2, 0.72, 0.03, 1.5, 'the spike')],
   fists:      [Z(0, 0.03, 0, 0.03, 0.1, 1)],
   excalibur:  [Z(0, 0.03, 0, 0.4, 0.035, 0.7, 'near the hilt'), Z(0, 0.4, 0, 0.72, 0.035, 1), Z(0, 0.72, 0, 1.0, 0.035, 1.3, 'sweet spot'), Z(0, 1.0, 0, 1.13, 0.035, 1)],
 };
 // Blunt weapons still knock limbs off, but every hit also leaves a bruise that slowly hurts.
-export const BLUNT = new Set(['hammer', 'chicken', 'baguette', 'trout', 'pan', 'fists']);
+export const BLUNT = new Set(['hammer', 'mace', 'flail', 'fists']);
 // Where the best part of a weapon sits, handy for tuning reach.
 const sweetDist = (id) => { const z = HITBOX[id].reduce((a, b) => (b.m > a.m ? b : a)); return (z.a[1] + z.b[1]) / 2; };
 export const SPIN_TIME = 5.5;

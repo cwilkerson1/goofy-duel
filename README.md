@@ -94,19 +94,19 @@ opponent's are revealed when it stops, and the fight begins.
 
 | Weapon | What it's like |
 |---|---|
-| 🗡️ Trusty Longsword | The baseline. Reliable. Boring. Effective. |
-| ⚔️ Absurd Greatsword | Two-handed. Huge reach and damage, slow, cheap to block with |
-| 🔪 Pointy Dagger | Very fast, very short, weak blocks |
-| 🪓 Limb Collector | An axe that is very good at taking arms and legs off |
-| 🔨 Bonk Hammer | Two-handed. Every hit dazes and shoves; bad at severing |
-| 🔱 Very Long Stick | Two-handed. A spear with the longest reach in the game |
-| 💀 Grim Scythe | Two-handed. Long, slow, and the best limb remover after Excalibur |
-| 🐔 Rubber Chicken | Barely hurts, squeaks, and launches people across the arena |
-| 🥖 Day-Old Baguette | Quick and weak, sprays crumbs |
-| 🐟 Slappy Trout | A wet slap that knocks people flying |
-| 🍳 Frying Pan | BONG. Heavy daze on hit, and blocking with it barely costs stamina |
-| 👊 Bare Fists | The wheel hates you. Tiny reach, fast, red boxing glove. Comes with a sad trombone |
-| ✨ EXCALIBUR | Rare jackpot. Fast, brutal, golden. Comes with a fanfare |
+| 🗡️ Longsword | The baseline: reach and speed in balance |
+| ⚔️ Greatsword | Two-handed. Huge reach and damage, slow, cheap to block with |
+| 🔪 Rondel Dagger | Very fast, very short, weak blocks |
+| 🪓 Battle Axe | Very good at taking arms and legs off |
+| 🔨 War Hammer | Two-handed. Every hit dazes and shoves; bad at severing |
+| 🔱 Spear | Two-handed. The longest reach in the game |
+| 💀 War Scythe | Two-handed. Long, slow, and the best limb remover after Excalibur |
+| 🗡️ Arming Sword | A short one-handed sword: quick and light, a little less reach and damage than the longsword |
+| ⚒️ Flanged Mace | One-handed and blunt. Dazes and shoves on hit |
+| ⛓️ Flail | Blunt, with a spiked ball on a chain. Hits hard and knocks people back, but it's poor for blocking |
+| ⛏️ War Pick | A long spike that punches through armour; small sweet spot, big damage |
+| 👊 Bare Fists | No weapon this round. Tiny reach, fast. Comes with a sad trombone |
+| ✨ Excalibur | Rare jackpot. Fast, brutal, golden. Comes with a fanfare |
 
 **Hitboxes and sweet spots.** Each weapon only hits with the part of it you can see, so reach comes
 from its real shape, and the hitboxes are matched to each weapon's 3D model. Whichever part of the weapon
@@ -117,18 +117,19 @@ blood and lands with a heavy thud, while a handle or shaft hit barely bleeds.
 |---|---|---|
 | Longsword, Greatsword, Excalibur | Upper third of the blade | Near the hilt |
 | Dagger | The point | |
-| Axe, Hammer | The head (BONK) | The handle |
+| Axe, Hammer, Mace | The head | The handle |
 | Spear | The tip, at the far end of its reach | Shaft pokes up close |
 | Scythe | **The heel**, where the blade meets the pole: the strongest hit in the game | The pole |
-| Frying Pan | The pan (BONG) | The handle |
-| Chicken, Baguette, Trout | Beak, crusty end, face | |
+| Arming Sword | Upper third of the blade | Near the hilt |
+| Flail | The spiked ball | The handle, and the chain is weak |
+| War Pick | The spike | The handle |
 
-**Blunt weapons** (hammer, chicken, baguette, trout, pan, fists) can still knock limbs and heads off,
+**Blunt weapons** (hammer, mace, flail, fists) can still knock limbs and heads off,
 but every hit also **bruises**: the body part darkens and you keep losing health over time, so
 they can win by bruising someone to death.
 
 **Practice one weapon:** `WEAPON=scythe npm start` makes the wheel always land on that weapon
-(use any id from `WEAPONS`, such as `trout` or `pan`).
+(use any id from `WEAPONS`, such as `mace`, `flail`, `pick` or `arming`).
 
 **Two-handed weapons.** The big ones (greatsword, hammer, spear and scythe) are held with both hands.
 They swing slower than one-handed weapons but hit about 20% harder. Lose an arm while holding one and
@@ -140,10 +141,11 @@ stamina cost and footwork, and the wheel tells you what you got (for example "qu
 | Weapon | Feel |
 |---|---|
 | Dagger, Fists | Very fast to wind up, swing and recover, cheap on stamina, nimble feet, but tiny reach |
-| Baguette, Chicken | Quick and light; the chicken's floppy swing takes a moment to arrive |
+| Arming Sword | Quick and light |
+| Flail | The ball takes a moment to come round, so its swing is a touch slow |
 | Longsword | The baseline |
 | Excalibur | Quicker than a longsword in every way |
-| Trout, Frying Pan | Close to the baseline; the pan's swing is snappy |
+| Mace, War Pick | Close to the baseline; the pick winds up a bit slower |
 | Spear | Quick jab with the longest reach, but slow to pull back |
 | Axe | Slow wind-up, then a fast chop, then a long recovery |
 | Hammer | The slowest wind-up; costs lots of stamina |
