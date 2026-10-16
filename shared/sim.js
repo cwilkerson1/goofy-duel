@@ -173,6 +173,7 @@ const BLOCK = {
 // Sword pose in the knight's local frame: hand offset from the neck and blade direction.
 export function swordLocal(p) {
   if (p.dead) return { hand: [0.25, 0.25, -0.7], dir: norm([0.3, 0, -1]) };
+  if (p.weapon === 'fists' && p.stun <= 0) return fistLocal(p);
   if (p.stun > 0) return swingPose(140 + Math.sin(p.stun * 40) * 30, 60);
   if (p.blocking) return { hand: BLOCK[p.gdir][0], dir: norm(BLOCK[p.gdir][1]) };
   // Kicking: the weapon arm swings out wide for balance, clearing the view of the kick.
@@ -197,6 +198,42 @@ export function swordLocal(p) {
     return mix(swingPose(s.a[1], s.p[1] + chopTilt(p, p.saim) + tilt), guardPose(p), k);
   }
   return guardPose(p);
+}
+// Bare fists box instead of swinging a weapon. Hands up by the chin at guard; an overhead attack is a
+// straight right; a side attack is a hook thrown with the hand on that side, so a left is a left hook.
+// Poses are worked out for the right hand and mirrored for the left. dir is the way the knuckles face.
+const FIST_SH = [0, 0.2, -0.06];
+const fistGuard = (p) => { const k = gait(p), w = p.walk || 0, br = p.breath || 0;
+  return { hand: [0.34 + 0.015 * Math.sin(br * 1.6), 0.15, -0.01 + 0.02 * k * Math.sin(2 * w + 1.2)], dir: norm([0.55, -0.15, 0.8]) }; };
+export const punchHand = (p) => (p.sdir === 'left' && ['hold', 'active', 'recover'].includes(p.state) && !p.parts.armL.cut) || p.parts.armR.cut ? 'armL' : 'armR';
+const mirror = (q) => ({ hand: [q.hand[0], -q.hand[1], q.hand[2]], dir: [q.dir[0], -q.dir[1], q.dir[2]] });
+// A hook: the fist travels round an arc in front of the shoulder, knuckles leading into the target. The
+// elbow is bent at the wind-up and the arm opens out to full reach as it comes across the front.
+const hookPose = (a, pt) => { const d = bladeDir(a, pt), r = ARM * lerp(0.95, 0.62, clamp(a / 65, 0, 1)); return { hand: [FIST_SH[0] + d[0] * r, FIST_SH[1] + d[1] * r, FIST_SH[2] + d[2] * r], dir: norm(bladeDir(a - 35, pt)) }; };
+// A straight: drawn back to the cheek, then driven out to full reach along the line you're looking.
+const jabBack = (hk) => ({ hand: [0.1 - 0.08 * hk, 0.2 + 0.04 * hk, -0.1], dir: norm([1, -0.05, 0.25]) });
+const jabOut = (pt) => { const d = bladeDir(-6, pt); return { hand: [FIST_SH[0] + d[0] * ARM, FIST_SH[1] + d[1] * ARM, FIST_SH[2] + d[2] * ARM], dir: d }; };
+function fistLocal(p) {
+  const g = fistGuard(p);
+  let q;
+  if (p.blocking) q = { hand: [0.3, 0.1, 0.02], dir: norm([0.25, -0.1, 1]) }; // forearms up in front of the face
+  else if (p.state === 'kick') q = g;
+  else {
+    const straight = p.sdir === 'over', aim = (deg) => clamp(deg, -60, 30) * 0.9 + 4;
+    const wound = (hk, deg) => (straight ? jabBack(hk) : hookPose(55 + 15 * hk, aim(deg) * 0.6));
+    if (p.state === 'hold') {
+      const k = ease(clamp(p.st / tm(p, 'DRAW'), 0, 1));
+      const hk = ease(clamp((p.st - tm(p, 'DRAW')) / (tm(p, 'HEAVY_AT') - tm(p, 'DRAW')), 0, 1));
+      q = mix(g, wound(hk, p.pitch / D2R), k);
+    } else if (p.state === 'active' || p.state === 'recover') {
+      const deg = p.saim, end = straight ? jabOut(aim(deg)) : hookPose(-25, aim(deg) * 0.6);
+      if (p.state === 'active') {
+        const u = clamp(p.st / tm(p, 'ACTIVE'), 0, 1), k = u * u * (3 - 2 * u), w = wound(p.heavy ? 1 : 0, deg);
+        q = straight ? mix(w, end, k) : hookPose(lerp(55 + (p.heavy ? 15 : 0), -25, k), aim(deg) * 0.6);
+      } else q = mix(end, g, ease(clamp(p.st / p.recDur, 0, 1)));
+    } else q = g;
+  }
+  return punchHand(p) === 'armL' ? mirror(q) : q;
 }
 // The weapon isn't frozen in place at guard: it rocks with each step (slightly behind the body, so it
 // swings rather than riding along), breathes when you stand still, and lags a touch when you turn.
@@ -258,13 +295,13 @@ export function skeleton(p) {
   const bend = (h, ft) => [(h[0] + ft[0]) / 2 + f[0] * 0.12, (h[1] + ft[1]) / 2 + 0.05, (h[2] + ft[2]) / 2 + f[2] * 0.12];
   const knee = (h, ft, leg) => (kicking && leg === kickLeg && kc.ext < 0.95 ? kickKnee : bend(h, ft));
 
-  const holder = swordArm(p);
+  const fists = p.weapon === 'fists', holder = fists && swordArm(p) ? punchHand(p) : swordArm(p);
   let hand = null, tip = null;
   if (holder) {
     // p.swordPose: the browser passes a smoothed copy of swordLocal so the weapon glides between poses.
     const s = p.swordPose || swordLocal(p);
     // An off-hand holder shifts the grip over to its own side.
-    const ho = holder === 'armL' ? [s.hand[0], s.hand[1] - 0.3, s.hand[2]] : s.hand;
+    const ho = holder === 'armL' && !fists ? [s.hand[0], s.hand[1] - 0.3, s.hand[2]] : s.hand;
     hand = L(neck, ho[0], ho[1], ho[2]);
     const d = dirW(s.dir);
     const len = wpn(p).len;
@@ -278,7 +315,12 @@ export function skeleton(p) {
   // The free arm flails goofily.
   const fl = -Math.sin(w) * 0.22 * k + Math.sin(w * 1.3 + 1) * 0.08 * (1 - k) + (p.stun > 0 ? Math.sin(p.stun * 30) * 0.4 : 0);
   const limp = p.dead || p.downT > 0;
-  const freeHand = (side) => (limp ? L(neck, 0.05, side * 0.28, -0.6) : L(neck, 0.15 + fl, side * 0.32, -0.55 + Math.abs(fl) * 0.3));
+  const freeHand = (side) => {
+    if (limp) return L(neck, 0.05, side * 0.28, -0.6);
+    // With bare fists the other hand stays up guarding the face.
+    if (fists && p.stun <= 0) { const q = p.blocking ? [0.3, 0.1, 0.02] : fistGuard(p).hand; return L(neck, q[0], side * Math.abs(q[1]), q[2]); }
+    return L(neck, 0.15 + fl, side * 0.32, -0.55 + Math.abs(fl) * 0.3);
+  };
   const handR = holder === 'armR' ? hand : freeHand(1);
   // Two-handed weapons: the left hand grips further down the handle.
   const g = wpn(p).grip || 0, twoHands = holder === 'armR' && wpn(p).two && !p.parts.armL.cut && !p.dead;
@@ -360,7 +402,7 @@ const touching = (w, def, shapes, order) => order.filter((k) => !def.parts[k].cu
 // The damaging zones of whatever the attacker is swinging, in world space, best zones first.
 export function weaponZones(p, sk) {
   if (sk.tip) {
-    const off = p.parts.armR.cut ? 0.8 : 1, h = sk.hand, d = sk.wdir, e = sk.wedge;
+    const off = p.parts.armR.cut && p.weapon !== 'fists' ? 0.8 : 1, h = sk.hand, d = sk.wdir, e = sk.wedge;
     const at = ([x, y]) => [h[0] + d[0] * y + e[0] * x, h[1] + d[1] * y + e[1] * x, h[2] + d[2] * y + e[2] * x];
     return (HITBOX[p.weapon] || HITBOX.longsword).map((z) => ({ a: at(z.a), b: at(z.b), r: z.r, m: z.m * off, tag: z.tag })).sort((a, b) => b.m - a.m);
   }
@@ -464,6 +506,11 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
   if (W.stun) def.stun = Math.max(def.stun, W.stun * (att.heavy ? 1.5 : 1));
   interrupt(def, 0.35);
   if (part.hp > 0) return;
+  // Punches can't tear anything off: a battered limb stays on, and a final blow to the head is a knockout.
+  if (att.weapon === 'fists' && partName !== 'torso') {
+    if (partName === 'head') return kill(room, def, 'knockout', att.yaw + rand(-0.4, 0.4));
+    part.hp = 1; return;
+  }
   if (partName === 'torso') return kill(room, def, 'gutted', att.yaw + rand(-0.4, 0.4));
   const hadSword = swordArm(def) === partName;
   part.cut = true; part.hp = 0;

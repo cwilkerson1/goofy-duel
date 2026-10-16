@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
@@ -609,11 +609,23 @@ function makeWeapon(id) {
       const face = add(cyl(0.026, 0.06), MAT.darkSteel, L - 0.07, -0.06); face.rotation.z = Math.PI / 2;
       break;
     }
-    case 'fists': glow = std(0xd8261f, { roughness: 0.4 }); add(new THREE.SphereGeometry(0.1, 14, 10), glow, 0.03).scale.set(1, 1.15, 1); break;
+    case 'fists': glow = pbrMat(TEX.steel, { metalness: 0.9, color: 0xb8bec6 }); g.add(makeFist(glow)); break;
     case 'excalibur': glow = pbrMat(TEX.steel, { metalness: 0.95, color: 0xffe08a, emissive: 0x332200 }); add(blade(0.06, L, 0.01), glow, 0.03); add(guard(0.28), MAT.gold, 0.01); add(new THREE.SphereGeometry(0.03, 8, 6), std(0x3fa7ff, { emissive: 0x1050ff }), 0.01, 0, -0.03); grip(); break;
     default: glow = steel(); add(blade(0.05, L, 0.009), glow, 0.03); add(guard(0.22), MAT.steel, 0.01); grip();
   }
   g.userData.glowMat = glow; g.userData.baseEmissive = glow.emissive.clone();
+  return g;
+}
+// A clenched gauntlet, knuckles pointing up +y: the back of the hand, four curled fingers, the thumb
+// folded across them, and a flared cuff. knuckles is the material that glows on a charged punch.
+function makeFist(knuckles) {
+  const g = new THREE.Group(), add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
+  add(new THREE.BoxGeometry(0.088, 0.075, 0.075), MAT.steel, 0, 0, 0.004);
+  for (let k = 0; k < 4; k++) {
+    const x = -0.033 + k * 0.022, f = add(new THREE.CapsuleGeometry(0.0125, 0.05, 3, 8), knuckles, x, 0.046 - Math.abs(k - 1.5) * 0.004, 0.006); f.rotation.x = Math.PI / 2;
+  }
+  const th = add(new THREE.CapsuleGeometry(0.013, 0.045, 3, 8), MAT.steel, -0.004, 0.012, 0.046); th.rotation.z = Math.PI / 2;
+  add(new THREE.CylinderGeometry(0.05, 0.058, 0.07, 14), MAT.darkSteel, 0, -0.07, 0);
   return g;
 }
 // A closed great helm with a visor slit, breathing holes and a crest in the team colour.
@@ -672,6 +684,7 @@ class Knight {
     this.belt = m(GEO.belt, MAT.leather); this.buckle = m(GEO.buckle, MAT.brass);
     this.knees = [m(GEO.knee, MAT.iron), m(GEO.knee, MAT.iron)];
     this.weaponId = 'longsword'; this.sword = makeWeapon(this.weaponId); this.root.add(this.sword);
+    this.offFist = makeFist(MAT.darkSteel); this.offFist.visible = false; this.root.add(this.offFist); // the non-punching hand, when boxing
   }
   update(p, sk, firstPerson) {
     const cut = (k) => p.parts[k].cut;
@@ -701,6 +714,16 @@ class Knight {
       const vamb = arm === this.armR ? this.vambR : this.vambL;
       arm.visible = hand.visible = vamb.visible = !cut(key);
       if (!cut(key)) { seg(arm, sh, hk); seg(vamb, sh.clone().lerp(hk, 0.5), hk.clone().lerp(sh, 0.08)); hand.position.copy(hk); hand.quaternion.copy(arm.quaternion); }
+    }
+    // Boxing: both hands are clenched fists. The punching one is the weapon; the other follows its forearm.
+    const boxing = p.weapon === 'fists' && !!swordArm(p), puncher = boxing ? punchHand(p) : null, other = puncher === 'armR' ? 'armL' : 'armR';
+    this.offFist.visible = false;
+    if (boxing) {
+      this.handR.visible = this.handL.visible = false;
+      if (!cut(other)) {
+        const arm = other === 'armR' ? this.armR : this.armL;
+        this.offFist.visible = !wheel.hiding(); this.offFist.position.copy(other === 'armR' ? P.handR : P.handL); this.offFist.quaternion.copy(arm.quaternion);
+      }
     }
     [['legR', 'hipR', 'kneeR', 'footR'], ['legL', 'hipL', 'kneeL', 'footL']].forEach(([key, h, kn, ft], i) => {
       // In first person your legs are hidden, except the one you're kicking with, so you see the kick land.

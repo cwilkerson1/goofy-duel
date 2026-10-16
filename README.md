@@ -107,7 +107,7 @@ opponent's are revealed when it stops, and the fight begins.
 | ⚒️ Flanged Mace | One-handed and blunt. Built to beat armour: hits hard, dazes and shoves |
 | ⛓️ Flail | Blunt, with a spiked ball on a chain. Hits hard and knocks people back, but it's poor for blocking |
 | ⛏️ War Pick | A long spike that punches through armour; small sweet spot, big damage |
-| 👊 Bare Fists | No weapon this round. Tiny reach, fast. Comes with a sad trombone |
+| 👊 Bare Fists | No weapon this round: you box. Click straight for a straight right, steer left or right for a hook with that hand. Fast, short reach, and punches can't take limbs off (a knockout to the head still wins). Comes with a sad trombone |
 | ✨ Excalibur | Rare jackpot. Fast, brutal, golden. Comes with a fanfare |
 
 **Hitboxes and sweet spots.** Each weapon only hits with the part of it you can see, so reach comes
