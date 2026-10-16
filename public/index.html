@@ -10,17 +10,27 @@
   #hud { pointer-events: none; }
   #lobby { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #1b1626ee; z-index: 2; }
   #lobby .card { background: #2c2440; padding: 28px 32px; border-radius: 14px; width: min(440px, 90vw); box-shadow: 0 10px 40px #0009; }
-  #lobby h1 { margin: 0 0 4px; font-size: 34px; letter-spacing: 1px; }
-  #lobby p { margin: 0 0 18px; color: #c9bfe0; }
+  #lobby h1 { margin: 0 0 14px; font-size: 34px; letter-spacing: 1px; }
   #lobby label { display: block; font-size: 13px; color: #c9bfe0; margin: 10px 0 4px; }
   #lobby input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border-radius: 8px; border: 2px solid #4a3d6b; background: #1b1626; color: #fff; }
   #lobby button { margin-top: 18px; width: 100%; font: inherit; font-size: 20px; padding: 12px; border: 0; border-radius: 10px; background: #e8740c; color: #fff; cursor: pointer; }
   #lobby button:hover { background: #ff8a2a; }
-  #lobby .keys { margin-top: 16px; font-size: 13px; color: #a99fc4; line-height: 1.6; }
+  #lobby .pair { display: flex; gap: 10px; }
   #lobby .ghost { background: transparent; border: 2px solid #4a3d6b; font-size: 16px; padding: 9px; margin-top: 10px; }
   #lobby .ghost:hover { background: #3a3054; }
   #menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #0d0a16cc; z-index: 3; }
-  #menu.open { display: flex; }
+  #menu.open, #howto.open { display: flex; }
+  #howto { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #0d0a16cc; z-index: 3; }
+  #howto .panel { background: #2c2440; border-radius: 14px; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 10px 40px #000a; padding: 22px 26px; box-sizing: border-box; }
+  #howto h2 { margin: 0 0 10px; font-size: 26px; }
+  #howto h3 { margin: 16px 0 4px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: #ff9a3c; }
+  #howto .ctl { display: grid; grid-template-columns: 150px 1fr; gap: 8px 14px; align-items: baseline; font-size: 15px; }
+  #howto .ctl > :nth-child(odd) { color: #fff; white-space: nowrap; }
+  #howto .ctl > :nth-child(even) { color: #c9bfe0; }
+  #howto p { margin: 4px 0; color: #c9bfe0; font-size: 14px; line-height: 1.5; }
+  #howto button { width: 100%; margin-top: 18px; font: inherit; font-size: 17px; padding: 11px; border: 0; border-radius: 10px; background: #e8740c; color: #fff; cursor: pointer; }
+  #howto button:hover { filter: brightness(1.1); }
+  @media (max-width: 480px) { #howto .ctl { grid-template-columns: 1fr; gap: 2px; } #howto .ctl > :nth-child(even) { margin-bottom: 8px; } }
   #menu .panel { background: #2c2440; border-radius: 14px; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 10px 40px #000a; padding: 22px 26px; box-sizing: border-box; }
   #menu h2 { margin: 0 0 6px; font-size: 26px; }
   #menu h3 { margin: 18px 0 6px; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; color: #ff9a3c; }
@@ -46,22 +56,33 @@
 <div id="lobby">
   <div class="card">
     <h1>🎃 Arena Roulette</h1>
-    <p>First-person duels in a haunted arena, with Last Oasis-style directional combat. Limbs are optional.</p>
     <label for="name">Your knightly name</label>
     <input id="name" maxlength="20" autocomplete="off">
     <label for="room">Arena (share this with your opponent)</label>
     <input id="room" maxlength="24" value="main" autocomplete="off">
     <button id="go">Enter the arena</button>
-    <button id="gear" class="ghost">⚙ Settings</button>
-    <div class="keys">
-      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> jump · mouse looks<br>
-      Move the mouse <b>left, right or up</b> to pick a side. <b>Hold left click</b> to draw back, steer, <b>release</b> to swing. Hold longer for a <b>heavy</b>.<br>
-      Hold <b>right click</b> and steer toward the incoming blade to block (no hints: watch their weapon). Right click while drawing back to <b>feint</b>.<br>
-      <kbd>F</kbd> kick (unblockable) · <kbd>M</kbd> mute · <kbd>Esc</kbd> settings
-    </div>
+    <div class="pair"><button id="howBtn" class="ghost">📖 How to play</button><button id="gear" class="ghost">⚙ Settings</button></div>
     <div class="ver">version __VERSION__</div>
   </div>
 </div>
+<div id="howto"><div class="panel">
+  <h2>📖 How to play</h2>
+  <div class="ctl">
+    <span><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></span><span>Move (mouse to look)</span>
+    <span><kbd>Shift</kbd></span><span>Sprint (uses stamina)</span>
+    <span><kbd>Space</kbd></span><span>Jump</span>
+    <span>Move the mouse</span><span>Pick a side: left, right or up. It's hidden from your opponent.</span>
+    <span>Left click</span><span>Light attack</span>
+    <span>Hold left click</span><span>Heavy attack: slower, hits much harder</span>
+    <span>Hold right click</span><span>Block. Steer toward the side the blade is coming from.</span>
+    <span><kbd>Q</kbd></span><span>Feint: cancel your attack</span>
+    <span><kbd>F</kbd></span><span>Kick: can't be blocked, knocks them down</span>
+    <span><kbd>M</kbd> · <kbd>Esc</kbd></span><span>Mute · settings and leave</span>
+  </div>
+  <h3>The duel</h3>
+  <p>A wheel picks each fighter's weapon every round. Best of 5: first to 3 round wins takes the duel. Watch where their weapon is drawn back to and block that side.</p>
+  <button id="howClose">Got it</button>
+</div></div>
 <div id="menu"><div class="panel">
   <h2>⚙ Settings</h2>
   <div id="menuRows"></div>

@@ -871,6 +871,10 @@ const menu = (() => {
   const close = () => root.classList.remove('open');
   $('menuClose').onclick = () => { if (joined) lockPointer(); else close(); };
   $('gear').onclick = open;
+  // How to play: the controls, on their own panel instead of small print on the start screen.
+  $('howBtn').onclick = () => $('howto').classList.add('open');
+  $('howClose').onclick = () => $('howto').classList.remove('open');
+  $('howto').onclick = (e) => { if (e.target.id === 'howto') $('howto').classList.remove('open'); };
   // Leaving frees your spot (the first person watching steps in) and takes you back to the start screen.
   $('menuLeave').onclick = () => { leaving = true; music.stop(); if (ws) ws.close(); location.reload(); };
   document.addEventListener('pointerlockchange', () => { if (locked()) close(); else if (joined) open(); });
@@ -915,6 +919,7 @@ function lockPointer() { try { const r = glCanvas.requestPointerLock(); if (r &&
 addEventListener('keydown', (e) => {
   // Esc normally just frees the mouse (which opens the menu); if the mouse wasn't captured, it toggles the menu.
   // Browsers won't let Esc grab the mouse back, so in a fight closing the menu leaves a "click to fight" prompt.
+  if (e.code === 'Escape' && $('howto').classList.contains('open')) { $('howto').classList.remove('open'); return; }
   if (e.code === 'Escape' && !locked()) { if (menu.isOpen()) menu.close(); else menu.open(); return; }
   if (e.target.tagName === 'INPUT' || menu.isOpen()) return;
   keys.add(e.code);
