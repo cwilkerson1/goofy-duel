@@ -57,7 +57,7 @@ mouse (press **Esc** to let go).
 | Heavy attack | Keep holding until your weapon glows white. It does 1.5× damage and staggers someone who blocks it, but you move slower while charging. |
 | Block | **Hold right click** (or Shift) and move the mouse **toward the side the blade is coming from**. |
 | Feint | Right click while drawing back cancels the attack. Or switch sides just before you release. |
-| Kick | **F** (or a side mouse button). Kicks can't be blocked, they knock the target back and cancel what they were doing, and they're short range. |
+| Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked, they knock the target back and cancel what they were doing, and they're short range. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
 | Mute | **M** |
 | Settings menu (graphics, mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
 | Cycle graphics preset (Low / Medium / High) | **G** |

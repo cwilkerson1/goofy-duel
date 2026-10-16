@@ -24,7 +24,8 @@ export const T = {
   MAX_HOLD: 2.5,     // auto-release after this
   ACTIVE: 0.18, RECOVER: 0.32, BOUNCE: 0.5,
   CHAMBER: 0.14,     // a fresh swing this young chambers an incoming one from the matching side
-  KICK: 0.42, KICK_HIT: [0.12, 0.24],
+  KICK: 0.42, KICK_HIT: [0.12, 0.26],
+  KICK_MISS: 0.65,   // stumble after kicking nothing
 };
 // The weapon wheel. Every round each fighter gets one at random (weight = slice size).
 // len: blade reach in metres. dmg: overall damage. sever: extra damage to limbs and heads.
@@ -150,6 +151,8 @@ export function swordLocal(p) {
   if (p.dead) return { hand: [0.25, 0.25, -0.7], dir: norm([0.3, 0, -1]) };
   if (p.stun > 0) return swingPose(140 + Math.sin(p.stun * 40) * 30, 60);
   if (p.blocking) return { hand: BLOCK[p.gdir][0], dir: norm(BLOCK[p.gdir][1]) };
+  // Kicking: the weapon arm swings out wide for balance, clearing the view of the kick.
+  if (p.state === 'kick') return mix(guardPose(p), { hand: [0.12, 0.5, -0.12], dir: norm([0.35, 0.75, 0.45]) }, kickCurve(p).knee);
   const s = SWING[p.sdir];
   if (p.state === 'hold') {
     const k = ease(clamp(p.st / tm(p, 'DRAW'), 0, 1));
@@ -182,6 +185,14 @@ const gait = (p) => (p.onGround === false ? 0 : clamp(Math.hypot(p.vx || 0, p.vz
 function swingPose(a, pp) { const d = bladeDir(a, pp); return { hand: [d[0] * ARM, d[1] * ARM + 0.2, d[2] * ARM - 0.06], dir: d }; }
 function mix(A, B, k) { return { hand: A.hand.map((v, i) => lerp(v, B.hand[i], k)), dir: norm(A.dir.map((v, i) => lerp(v, B.dir[i], k))) }; }
 
+// Kick timing, 0..1: knee comes up (chamber), foot drives out to full extension, then pulls back.
+export function kickCurve(p) {
+  if (p.state !== 'kick') return { knee: 0, ext: 0 };
+  const u = clamp(p.st / T.KICK, 0, 1);
+  const knee = u < 0.28 ? ease(u / 0.28) : u < 0.7 ? 1 : 1 - ease((u - 0.7) / 0.3);
+  const ext = u < 0.28 ? 0 : u < 0.5 ? ease((u - 0.28) / 0.22) : u < 0.62 ? 1 : 1 - ease((u - 0.62) / 0.38);
+  return { knee, ext };
+}
 // All joint positions in world space, as [x, y, z].
 export function skeleton(p) {
   const f = forward(p.yaw), r = rightOf(p.yaw);
@@ -194,7 +205,7 @@ export function skeleton(p) {
   const k = legs === 2 ? gait(p) : 0, w = p.walk || 0;
   const sp = Math.hypot(p.vx || 0, p.vz || 0), vF = sp > 0.1 ? ((p.vx || 0) * f[0] + (p.vz || 0) * f[2]) / sp : 1, vR = sp > 0.1 ? ((p.vx || 0) * r[0] + (p.vz || 0) * r[2]) / sp : 0;
   const bob = 0.03 * k * Math.cos(2 * w), shift = -0.025 * k * Math.cos(w);
-  const lean = (p.state === 'active' ? (p.sdir === 'over' ? 0.12 : 0.06) : p.state === 'hold' ? -0.04 : 0) + 0.04 * k * vF;
+  const lean = (p.state === 'active' ? (p.sdir === 'over' ? 0.12 : 0.06) : p.state === 'hold' ? -0.04 : 0) + 0.04 * k * vF - 0.1 * kickCurve(p).knee;
   const hipH = (legs ? LEG : 0.22) + bob;
   const hip = L(base, 0, shift, hipH);
   const neck = L(base, lean, shift * 0.6, hipH + TORSO);
@@ -205,14 +216,18 @@ export function skeleton(p) {
   const liftR = Math.max(0, Math.cos(w)) * 0.14 * k, liftL = Math.max(0, -Math.cos(w)) * 0.14 * k;
   let footR = L(base, sw * vF * (1 - air) + 0.15 * air, 0.12 + sw * vR, liftR + 0.25 * air);
   const footL = L(base, -sw * vF * (1 - air) - 0.05 * air, -0.12 - sw * vR, liftL + 0.12 * air);
-  // Kick: the right leg (or the left one if that's all that's left) shoots forward.
-  const kickK = p.state === 'kick' ? Math.sin(clamp(p.st / T.KICK, 0, 1) * Math.PI) : 0;
-  const kickFoot = L(base, 1.05 * kickK, 0.05, hipH * kickK);
-  const kickLeg = p.parts.legR.cut ? 'legL' : 'legR';
-  if (kickK && kickLeg === 'legR') footR = kickFoot;
-  const footL2 = kickK && kickLeg === 'legL' ? kickFoot : footL;
+  // Kick: the right leg (or the left one if that's all that's left) chambers, knee up, then the foot
+  // drives out to hip height and pulls back. A missed kick ends overextended (see stepPlayer).
+  const kc = kickCurve(p), kickLeg = p.parts.legR.cut ? 'legL' : 'legR', ks = kickLeg === 'legR' ? 0.07 : -0.07;
+  const kneeH = lerp(hipH * 0.5, hipH - 0.05, kc.knee), kneeF = lerp(0.12, 0.42, kc.knee);
+  const kickKnee = L(base, kneeF, ks, kneeH);
+  const kickFoot = L(base, lerp(kneeF - 0.08, 1.02, kc.ext), ks + 0.02, lerp(Math.max(0.02, kneeH - 0.42), hipH * 1.05, kc.ext));
+  const kicking = kc.knee > 0 || kc.ext > 0;
+  if (kicking && kickLeg === 'legR') footR = kickFoot;
+  const footL2 = kicking && kickLeg === 'legL' ? kickFoot : footL;
   const hipR = L(hip, 0, 0.1, 0), hipL = L(hip, 0, -0.1, 0);
-  const knee = (h, ft) => [(h[0] + ft[0]) / 2 + f[0] * 0.12, (h[1] + ft[1]) / 2 + 0.05, (h[2] + ft[2]) / 2 + f[2] * 0.12];
+  const bend = (h, ft) => [(h[0] + ft[0]) / 2 + f[0] * 0.12, (h[1] + ft[1]) / 2 + 0.05, (h[2] + ft[2]) / 2 + f[2] * 0.12];
+  const knee = (h, ft, leg) => (kicking && leg === kickLeg && kc.ext < 0.95 ? kickKnee : bend(h, ft));
 
   const holder = swordArm(p);
   let hand = null, tip = null;
@@ -237,7 +252,7 @@ export function skeleton(p) {
   // Two-handed weapons: the left hand grips further down the handle.
   const g = wpn(p).grip || 0, twoHands = holder === 'armR' && wpn(p).two && !p.parts.armL.cut && !p.dead;
   const handL = holder === 'armL' ? hand : twoHands ? [hand[0] - wdir[0] * g, hand[1] - wdir[1] * g, hand[2] - wdir[2] * g] : freeHand(-1);
-  return { wdir: holder ? wdir : null, wedge: holder ? wedge : null, hip, hipR, hipL, neck, head, shR, shL, footR, footL: footL2, kneeR: knee(hipR, footR), kneeL: knee(hipL, footL2), handR, handL, hand, tip, f, r };
+  return { wdir: holder ? wdir : null, wedge: holder ? wedge : null, hip, hipR, hipL, neck, head, shR, shL, footR, footL: footL2, kneeR: knee(hipR, footR, 'legR'), kneeL: knee(hipL, footL2, 'legL'), handR, handL, hand, tip, f, r };
 }
 
 // ---------- geometry ----------
@@ -406,7 +421,15 @@ function stepPlayer(room, p, dt) {
       }
     } else if (p.state === 'active' && p.st >= tm(p, 'ACTIVE')) { p.state = 'recover'; p.st = 0; p.recDur = tm(p, 'RECOVER'); }
     else if (p.state === 'recover' && p.st >= p.recDur) { p.state = 'idle'; p.st = 0; p.cd = 0.05; }
-    else if (p.state === 'kick' && p.st >= T.KICK) { p.state = 'idle'; p.st = 0; p.cd = 0.1; }
+    else if (p.state === 'kick' && p.st >= T.KICK) {
+      p.state = 'idle'; p.st = 0; p.cd = 0.1;
+      // Kicking thin air leaves you overextended: you stumble forward and can't act for a moment.
+      if (!p.hitDone) {
+        const f = forward(p.yaw); p.vx += f[0] * 1.6; p.vz += f[2] * 1.6;
+        p.stun = Math.max(p.stun, T.KICK_MISS); p.stamWait = Math.max(p.stamWait || 0, 0.8);
+        room.events.push({ t: 'kickMiss', id: p.id });
+      }
+    }
     if (p.state === 'idle' && DIRS.includes(p.input.d)) p.gdir = p.input.d;
     p.blocking = !!p.input.b && p.state === 'idle' && p.stun <= 0;
 

@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
@@ -699,8 +699,11 @@ class Knight {
       if (!cut(key)) { seg(arm, sh, hk); seg(vamb, sh.clone().lerp(hk, 0.5), hk.clone().lerp(sh, 0.08)); hand.position.copy(hk); hand.quaternion.copy(arm.quaternion); }
     }
     [['legR', 'hipR', 'kneeR', 'footR'], ['legL', 'hipL', 'kneeL', 'footL']].forEach(([key, h, kn, ft], i) => {
-      const L = this.legs[i], on = !firstPerson && !cut(key);
+      // In first person your legs are hidden, except the one you're kicking with, so you see the kick land.
+      const kickLeg = cut('legR') ? 'legL' : 'legR', on = (!firstPerson || (p.state === 'kick' && key === kickLeg)) && !cut(key);
+      const L = this.legs[i];
       L.thigh.visible = L.shin.visible = L.boot.visible = this.knees[i].visible = on;
+      if (on && firstPerson) L.thigh.visible = this.knees[i].visible = false; // the thigh would fill the screen
       if (!on) return;
       seg(L.thigh, P[h], P[kn]); seg(L.shin, P[kn], P[ft].clone().lerp(P[kn], 0.1));
       this.knees[i].position.copy(P[kn]).addScaledVector(new THREE.Vector3(sk.f[0], 0, sk.f[2]), 0.04);
@@ -997,6 +1000,7 @@ function handleEvent(ev) {
       break;
     case 'guardbreak': audio.thud(); if (mine) shake = 0.08; break;
     case 'kickSwing': audio.whoosh('low'); break;
+    case 'kickMiss': audio.whoosh('low'); if (mine) shake = 0.05; break;
     case 'kick': audio.thud(); if (mine) { shake = 0.1; hurtFlash = 0.4; } break;
     case 'death': audio.slide(); break;
     case 'jump': if (mine) audio.boing(1); break;
@@ -1247,6 +1251,7 @@ function frame(now) {
     me = { ...me, x: pred.x, y: pred.y, z: pred.z, vx: pred.vx, vz: pred.vz, walk: pred.walk, onGround: pred.onGround };
     players[players.findIndex((p) => p && p.id === myId)] = me;
   }
+  if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(); }
     else music.stop();
@@ -1277,7 +1282,9 @@ function frame(now) {
     camera.position.set(sk.head[0], sk.head[1] + 0.02, sk.head[2]);
     // A slight roll with each step, so walking feels like walking.
     const gk = me.onGround ? Math.min(1, Math.hypot(me.vx || 0, me.vz || 0) / 2.4) : 0;
-    camera.rotation.set(look.pitch, look.yaw, 0.012 * gk * Math.sin(me.walk || 0));
+    // Kicking: the view tips down a little to follow your boot. Stumbling after a miss: the view wobbles.
+    const kc = kickCurve(me), wob = me.stun > 0 ? Math.sin(clock * 17) * 0.05 * Math.min(1, me.stun * 2) : 0;
+    camera.rotation.set(look.pitch - 0.38 * Math.max(kc.knee * 0.55, kc.ext), look.yaw, 0.012 * gk * Math.sin(me.walk || 0) + wob);
   } else if (me && myHeadGib) {
     // Your head is the camera now. Enjoy the ride.
     camera.position.copy(myHeadGib.g.position);
@@ -1418,5 +1425,5 @@ const audio = {
 };
 
 // For automated testing: ?debug exposes a couple of hooks.
-let debugCam = null;
-if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+let debugCam = null, debugPose = null;
+if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
