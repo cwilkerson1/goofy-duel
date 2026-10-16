@@ -800,7 +800,7 @@ function connect(name, room) {
     const m = JSON.parse(e.data);
     if (m.t === 'welcome') { myId = m.id; return; }
     if (m.t === 's') {
-      prev = cur; prevT = curT; cur = m; curT = performance.now();
+      prev = cur; prevT = curT; cur = m; curT = performance.now(); netBuffer.push(m, curT);
       const me = m.players.find((p) => p && p.id === myId);
       if (me && me.spawn !== mySpawn) { mySpawn = me.spawn; look.yaw = me.yaw; look.pitch = 0; }
       for (const ev of m.ev) handleEvent(ev);
@@ -944,17 +944,51 @@ const sparks = (() => {
 })();
 
 // ---------- interpolation ----------
+// Smooth movement over a bumpy connection: keep a short buffer of server updates and draw the world
+// slightly in the past, blending between the two updates either side of that moment. How far in the
+// past adapts to how jittery the connection is, so a steady wired link stays snappy and Wi-Fi stays smooth.
+const netBuffer = {
+  snaps: [], offset: null, jitter: 0, delay: 70,
+  push(m, now) {
+    if (typeof m.n !== 'number') return;
+    const st = (m.n / 60) * 1000, lag = now - st;
+    // offset tracks the fastest arrival seen, creeping up slowly so clock drift can't strand it
+    this.offset = this.offset === null ? lag : Math.min(lag, this.offset + 0.5);
+    const j = lag - this.offset;
+    this.jitter = j > this.jitter ? j : this.jitter * 0.97 + j * 0.03;
+    this.delay += (Math.min(250, Math.max(45, this.jitter * 1.5 + 40)) - this.delay) * 0.1;
+    this.snaps.push({ t: st, m });
+    while (this.snaps.length > 2 && this.snaps[1].t < st - 1000) this.snaps.shift();
+  },
+};
+function blendPlayer(q, p, k) {
+  if (!q || Math.hypot(q.x - p.x, q.z - p.z) > 2 || q.spawn !== p.spawn) return p; // teleported (new round): don't slide
+  const L = (a, b) => a + (b - a) * k;
+  const dy = Math.atan2(Math.sin(p.yaw - q.yaw), Math.cos(p.yaw - q.yaw));
+  const out = { ...(k < 0.5 ? q : p), x: L(q.x, p.x), y: L(q.y, p.y), z: L(q.z, p.z), yaw: q.yaw + dy * k, walk: L(q.walk, p.walk), stun: L(q.stun, p.stun), deathT: L(q.deathT, p.deathT) };
+  // swing timers only blend within the same move; across a change of move, take the newer one
+  if (q.state === p.state) out.st = L(q.st, p.st); else { out.state = p.state; out.st = p.st; out.sdir = p.sdir; out.heavy = p.heavy; }
+  out.parts = p.parts; out.dead = p.dead; out.weapon = p.weapon; out.blocking = p.blocking; out.gdir = p.gdir;
+  return out;
+}
 function interpPlayers() {
   if (!cur) return [];
-  if (!prev) return cur.players;
-  const k = Math.min(1.2, (performance.now() - curT) / Math.max(16, curT - prevT));
+  const B = netBuffer;
+  if (B.offset === null || B.snaps.length < 2) return cur.players;
+  const renderT = performance.now() - B.offset - B.delay;
+  let i = B.snaps.length - 1;
+  while (i > 0 && B.snaps[i - 1].t > renderT) i--;
+  const a = B.snaps[Math.max(0, i - 1)], b = B.snaps[i];
+  const span = b.t - a.t;
+  // past the newest update: hold it (with at most a sliver of extrapolation) rather than jumping
+  const k = span > 0 ? Math.max(0, Math.min(1.15, (renderT - a.t) / span)) : 1;
   return cur.players.map((p) => {
     if (!p) return null;
-    const q = prev.players.find((o) => o && o.id === p.id);
-    if (!q || Math.hypot(q.x - p.x, q.z - p.z) > 2 || q.state !== p.state || q.spawn !== p.spawn) return p;
-    const L = (a, b) => a + (b - a) * k;
-    const dy = Math.atan2(Math.sin(p.yaw - q.yaw), Math.cos(p.yaw - q.yaw));
-    return { ...p, x: L(q.x, p.x), y: L(q.y, p.y), z: L(q.z, p.z), yaw: q.yaw + dy * k, walk: L(q.walk, p.walk), st: L(q.st, p.st), stun: L(q.stun, p.stun), deathT: L(q.deathT, p.deathT) };
+    const pa = a.m.players.find((o) => o && o.id === p.id), pb = b.m.players.find((o) => o && o.id === p.id);
+    if (!pa || !pb) return p;
+    // positions come from the buffered moment; health, limbs and death are always the latest
+    const o = blendPlayer(pa, pb, k);
+    return { ...o, parts: p.parts, dead: p.dead, deathT: p.dead ? o.deathT : 0, headless: p.headless, weapon: p.weapon, score: p.score, stam: p.stam, bleed: p.bleed, bruise: p.bruise, color: p.color, name: p.name };
   });
 }
 
@@ -1293,4 +1327,4 @@ const audio = {
 };
 
 // For automated testing: ?debug exposes a couple of hooks.
-if (params.has('debug')) window.duel = { send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+if (params.has('debug')) window.duel = {  send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
