@@ -17,7 +17,7 @@ export const ARM = 0.6, BLADE = 0.95, HEAD_R = 0.14, TORSO = 0.6, LEG = 0.95;
 export const PARTS = ['head', 'torso', 'armR', 'armL', 'legR', 'legL'];
 export const PART_MAX = { head: 45, torso: 100, armR: 25, armL: 25, legR: 30, legL: 30 };
 export const DIRS = ['left', 'over', 'right'];
-export const WIN_SCORE = 5;
+export const WIN_SCORE = 3; // best of 5: the first to win 3 rounds wins the duel, and the match ends
 export const STAM_MAX = 100;
 
 export const T = {
@@ -639,13 +639,18 @@ export function stepRoom(room, dt) {
       room.phase = 'roundEnd'; room.timer = 3.5;
       if (alive.length === 1) {
         alive[0].score++;
-        room.msg = alive[0].score >= WIN_SCORE ? `${alive[0].name} WINS THE DUEL!` : `${alive[0].name} wins the round!`;
-        if (alive[0].score >= WIN_SCORE) room.timer = 6;
+        room.msg = `${alive[0].name} wins the round!`;
+        if (alive[0].score >= WIN_SCORE) {
+          // That's the match. It stays over (no rematch); everyone goes back to the start screen.
+          const [a, b] = fighters.map((p) => p.score).sort((x, y) => y - x);
+          room.phase = 'over'; room.msg = `${alive[0].name} WINS THE DUEL ${a}–${b}!`;
+          room.events.push({ t: 'matchEnd', winner: alive[0].id });
+        }
       } else room.msg = 'Everybody died. Classic.';
       room.events.push({ t: 'roundEnd' });
     }
   } else if (room.phase === 'roundEnd' && room.timer <= 0) {
-    startRound(room, fighters.some((p) => p.score >= WIN_SCORE));
+    startRound(room, false);
   } else if (room.phase === 'spin' && room.timer <= 0) { room.phase = 'countdown'; room.timer = 1.3; room.msg = 'Ready…'; }
   else if (room.phase === 'countdown' && room.timer <= 0) { room.phase = 'fight'; room.msg = 'FIGHT!'; }
 }

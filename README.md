@@ -159,7 +159,7 @@ What happens when a part comes off:
 - **Every missing limb bleeds,** and if your health bar empties you bleed out.
 - **Dying:** the body goes limp, the knees give, and it falls like dead weight in the direction the killing blow pushed it.
 
-First to 5 round wins takes the duel. To have more than one fight going at once, give each pair
+Every duel is **best of 5**: the first to win 3 rounds wins, the match ends there, and after a few seconds on the result everyone goes back to the start screen to set up the next one. To have more than one fight going at once, give each pair
 its own arena name on the start screen, or add `?room=name` to the link.
 
 ## Files

@@ -146,7 +146,7 @@ server.on('upgrade', (req, socket) => {
       i.mf = c(m.mf); i.ms = c(m.ms); i.j = m.j ? 1 : 0; i.b = m.b ? 1 : 0; i.s = m.s ? 1 : 0; i.d = m.d;
       if (Number.isFinite(m.yaw)) i.yaw = m.yaw;
       if (Number.isFinite(m.pitch)) i.pitch = Math.max(-1.5, Math.min(1.5, m.pitch));
-    } else if ((room.phase === 'countdown' || room.phase === 'spin') && (m.t === 'hold' || m.t === 'atk' || m.t === 'kick')) {
+    } else if ((room.phase === 'countdown' || room.phase === 'spin' || room.phase === 'over') && (m.t === 'hold' || m.t === 'atk' || m.t === 'kick')) {
       // no attacking before the horn
     } else if (m.t === 'hold') startHold(me, m.d);
     else if (m.t === 'release') releaseHold(me);

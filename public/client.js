@@ -1141,7 +1141,7 @@ function drawHud(players, me, opp) {
 
   // Scoreboard.
   if (!wheel.visible()) cur.players.forEach((p, i) => text(p ? `${p.name}  ${p.score}` : '— empty —', w / 2 + (i === 0 ? -30 : 30), 36, 20, TEAM_CSS[i], i === 0 ? 'right' : 'left'));
-  if (!wheel.visible()) { text('vs', w / 2, 36, 14, '#ffffffb0'); text('first to ' + WIN_SCORE, w / 2, 56, 12, '#ffffffb0'); }
+  if (!wheel.visible()) { text('vs', w / 2, 36, 14, '#ffffffb0'); text('best of ' + (WIN_SCORE * 2 - 1), w / 2, 56, 12, '#ffffffb0'); }
 
   if (me) {
     // Plain crosshair: your chosen direction is deliberately invisible, like Last Oasis.
@@ -1179,7 +1179,10 @@ function drawHud(players, me, opp) {
   } else if (cur.players.some(Boolean)) text('Spectating', w / 2, 90, 18);
 
   if (cur.phase === 'spin' || wheel.visible()) wheel.draw(w, h, players);
-  else if (cur.phase !== 'fight') text(cur.msg, w / 2, h * 0.32, cur.phase === 'roundEnd' ? 46 : 34, cur.phase === 'roundEnd' ? '#ffd23f' : '#fff');
+  else if (cur.phase === 'over') {
+    text(cur.msg, w / 2, h * 0.32, 46, '#ffd23f');
+    text(`Back to the start screen in ${Math.max(0, Math.ceil((matchOverAt + MATCH_OVER_WAIT - performance.now()) / 1000))}…`, w / 2, h * 0.32 + 44, 20, '#fff');
+  } else if (cur.phase !== 'fight') text(cur.msg, w / 2, h * 0.32, cur.phase === 'roundEnd' ? 46 : 34, cur.phase === 'roundEnd' ? '#ffd23f' : '#fff');
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   if (joined && !locked() && !menu.isOpen()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
@@ -1286,6 +1289,8 @@ function footsteps(p, isMe) {
 
 // ---------- main loop ----------
 let last = performance.now(), clock = 0, lastPhase = '', wasHeavy = false;
+// When the duel is won, everyone sees the result for a few seconds and then goes back to the start screen.
+const MATCH_OVER_WAIT = 8000; let matchOverAt = 0;
 function frame(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; clock += dt;
   const players = interpPlayers().slice();
@@ -1300,6 +1305,7 @@ function frame(now) {
   if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(); }
+    if (cur.phase === 'over') { matchOverAt = performance.now(); setTimeout(() => { if (cur && cur.phase === 'over') $('menuLeave').onclick(); }, MATCH_OVER_WAIT); }
     else music.stop();
     lastPhase = cur.phase;
   }
