@@ -597,7 +597,7 @@ function makeWeapon(id) {
     }
     case 'pan': {
       glow = std(0x2a2a2a, { metalness: 0.7, roughness: 0.4 }); add(cyl(0.02, 0.32), std(0x111111), 0.12);
-      const disc = add(new THREE.CylinderGeometry(0.17, 0.15, 0.04, 20), glow, L - 0.12); disc.rotation.x = Math.PI / 2;
+      const disc = add(new THREE.CylinderGeometry(0.17, 0.15, 0.04, 20), glow, L - 0.12); disc.rotation.z = Math.PI / 2; // flat face toward the target
       break;
     }
     case 'fists': glow = std(0xd8261f, { roughness: 0.4 }); add(new THREE.SphereGeometry(0.1, 14, 10), glow, 0.03).scale.set(1, 1.15, 1); break;
@@ -965,67 +965,44 @@ function sendInput(dt) {
   if ((s !== lastSent && now - lastSentT > 30) || now - lastSentT > 100) { send(o); lastSent = s; lastSentT = now; }
 }
 
-// ---------- events, quips, floaters ----------
-const floaters = [], bubbles = [];
+// ---------- events ----------
 let shake = 0, hurtFlash = 0, myHeadGib = null;
 const findP = (id) => cur && cur.players.find((p) => p && p.id === id);
-const QUIPS = {
-  armR: ["It's just a flesh wound!", 'I have another one!', 'That arm was a loan!'],
-  armL: ["Didn't need that one", 'Lefty no more!', 'My best waving arm!'],
-  legR: ["I'll hop it off!", 'Who needs legs anyway?', 'Behold, unicycle mode!'],
-  legL: ['Hop-a-long time!', "That'll hurt tomorrow", 'Leg day: cancelled.'],
-  spare: ['Good thing I brought a spare sword!', 'Switching hands!'],
-  both_legs: ['Come back, I shall bite your ankles!', 'Tactical crawl!'],
-  no_arms: ['I can still kick you!', 'Fine, HEADBUTTS then.'],
-  wrongblock: ['Wrong side!', 'Ow, other way!'],
-  parry: ['Nope!', 'Not today!', 'CLANG!'],
-  chamber: ['Chambered!', 'Right back at you!'],
-  guardbreak: ['My guard!', 'Too tired to block!'],
-  kicked: ['Oof!', 'Rude!', 'My dignity!'],
-};
-function say(id, kind) { const lines = QUIPS[kind]; if (lines) bubbles.push({ id, text: pick(lines), life: 2.4 }); }
 
 function handleEvent(ev) {
   const p = findP(ev.id), mine = ev.id === myId;
   switch (ev.t) {
     case 'swing': audio.whoosh(ev.dir); if (ev.heavy) audio.thud(); break;
     case 'hit':
-      blood.burst(V(ev.pos), 22, new THREE.Vector3(ev.dir[0], 0, ev.dir[1]));
-      audio.hitFor(ev.weapon); floaters.push({ pos: V(ev.pos), text: `-${ev.dmg}`, life: 0.9, color: ev.zm >= 1.25 ? '#ffd23f' : ev.zm < 0.6 ? '#aaa' : '#fff', big: ev.zm >= 1.25 });
-      if (ev.tag) floaters.push({ pos: V(ev.pos).add(new THREE.Vector3(0, 0.25, 0)), text: ev.zm >= 1.25 ? `${ev.tag.toUpperCase()}!` : ev.tag, life: 1.1, color: ev.zm >= 1.25 ? '#ffd23f' : '#ccc', big: ev.zm >= 1.25 });
+      // No pop-up numbers or words: how good a hit was shows in the blood, the sound and the shake.
+      // A sweet-spot hit sprays more and lands with a heavy thud; a handle or shaft hit barely bleeds.
+      blood.burst(V(ev.pos), ev.zm >= 1.25 ? 45 : ev.zm < 0.6 ? 8 : 22, new THREE.Vector3(ev.dir[0], 0, ev.dir[1]), ev.zm >= 1.25 ? 1.3 : 1);
+      audio.hitFor(ev.weapon); if (ev.zm >= 1.25) audio.thud();
       if (ev.weapon === 'baguette') for (let k = 0; k < 25; k++) sparks.spawn(V(ev.pos));
-      if (mine) { shake = 0.06; hurtFlash = 0.5; }
+      if (mine) { shake = ev.zm >= 1.25 ? 0.1 : 0.06; hurtFlash = ev.zm >= 1.25 ? 0.7 : 0.5; }
       crowd.cheer = Math.min(1, crowd.cheer + 0.25);
       break;
     case 'sever': {
       const gib = spawnGib(ev); if (mine && ev.part === 'head') myHeadGib = gib;
       blood.burst(V(ev.pos), 70, V(ev.vel).normalize(), 1.4); audio.squelch(); audio.cheer();
       crowd.cheer = 1;
-      floaters.push({ pos: V(ev.pos).add(new THREE.Vector3(0, 0.3, 0)), text: ev.part === 'head' ? 'DECAPITATED!' : 'SEVERED!', life: 1.4, color: '#ffd23f', big: true });
       if (mine) { shake = 0.12; hurtFlash = 1; }
-      if (p && ev.part !== 'head') {
-        const gone = (k) => p.parts[k].cut || ev.part === k;
-        const kind = ev.part.startsWith('leg') && gone('legR') && gone('legL') ? 'both_legs' : ev.part.startsWith('arm') && gone('armR') && gone('armL') ? 'no_arms' : ev.part;
-        say(ev.id, kind);
-      }
       break;
     }
-    case 'quip': setTimeout(() => say(ev.id, ev.kind), 900); break;
-    case 'parry': audio.clang(); say(ev.id, 'parry'); if (ev.by === myId) shake = 0.05;
+    case 'parry': audio.clang(); if (ev.by === myId) shake = 0.05;
       for (let i = 0; i < 20; i++) sparks.spawn(V(ev.pos));
       break;
-    case 'wrongblock': say(ev.id, 'wrongblock'); break;
-    case 'chamber': audio.clang(); audio.clang(); say(ev.id, 'chamber'); floaters.push({ pos: V(ev.pos), text: 'CHAMBER!', life: 1.2, color: '#3fe0ff', big: true });
+    case 'chamber': audio.clang(); audio.clang();
       for (let i = 0; i < 30; i++) sparks.spawn(V(ev.pos));
       break;
-    case 'guardbreak': audio.thud(); say(ev.id, 'guardbreak'); if (mine) shake = 0.08; break;
+    case 'guardbreak': audio.thud(); if (mine) shake = 0.08; break;
     case 'kickSwing': audio.whoosh('low'); break;
-    case 'kick': audio.thud(); say(ev.id, 'kicked'); if (mine) { shake = 0.1; hurtFlash = 0.4; } floaters.push({ pos: V(ev.pos), text: 'KICKED!', life: 1, color: '#fff', big: true }); break;
+    case 'kick': audio.thud(); if (mine) { shake = 0.1; hurtFlash = 0.4; } break;
     case 'death': audio.slide(); break;
     case 'jump': if (mine) audio.boing(1); break;
     case 'hop': audio.boing(1.6, mine ? 0.12 : 0.06); break;
     case 'roundEnd': audio.cheer(); crowd.cheer = 1; break;
-    case 'round': audio.howl(); clearGibs(); blood.clearDecals(); bubbles.length = 0; myHeadGib = null; break;
+    case 'round': audio.howl(); clearGibs(); blood.clearDecals(); myHeadGib = null; break;
     case 'spin': wheel.start(ev); break;
   }
 }
@@ -1118,17 +1095,6 @@ function drawHud(players, me, opp) {
   if (qualityToast > 0) { hctx.globalAlpha = Math.min(1, qualityToast); text(toastText, w / 2, h - 44, 16, '#fff'); hctx.globalAlpha = 1; }
   if (S.fps) text(`${perf.fps} fps`, w - 12, 22, 14, perf.fps >= 50 ? '#9be89b' : perf.fps >= 30 ? '#ffd27a' : '#ff8a7a', 'right');
 
-  // Floating damage numbers and speech bubbles.
-  for (const f of floaters) { const s = project(f.pos); if (!s) continue; hctx.globalAlpha = Math.min(1, f.life * 2); text(f.text, s[0], s[1], f.big ? 30 : 20, f.color); hctx.globalAlpha = 1; }
-  for (const b of bubbles) {
-    const p = players.find((q) => q && q.id === b.id); if (!p) continue;
-    const s = p.id === myId ? [w / 2, h * 0.72] : project(V(skeleton(p).head).add(new THREE.Vector3(0, 0.45, 0))); if (!s) continue;
-    hctx.font = '16px Trebuchet MS, sans-serif'; const tw = hctx.measureText(b.text).width + 22;
-    hctx.globalAlpha = Math.min(1, b.life * 3); hctx.fillStyle = '#fff';
-    hctx.beginPath(); hctx.roundRect(s[0] - tw / 2, s[1] - 20, tw, 30, 12); hctx.fill();
-    hctx.beginPath(); hctx.moveTo(s[0] - 7, s[1] + 9); hctx.lineTo(s[0], s[1] + 20); hctx.lineTo(s[0] + 7, s[1] + 9); hctx.fill();
-    hctx.fillStyle = '#2a1e33'; hctx.textAlign = 'center'; hctx.fillText(b.text, s[0], s[1] + 1); hctx.globalAlpha = 1;
-  }
   if (opp && !opp.dead) { const s = project(V(skeleton(opp).head).add(new THREE.Vector3(0, 0.32, 0))); if (s) text(opp.name, s[0], s[1], 15, TEAM_CSS[opp.color]); }
 
   if (!cur) { if (ws) text(connected ? 'Connecting…' : 'Looking for the server…', w / 2, h / 2, 30); return; }
@@ -1332,9 +1298,6 @@ function frame(now) {
   hurtFlash = Math.max(0, hurtFlash - dt * 1.5);
 
   blood.step(dt); stepGibs(dt); sparks.step(dt); updateCrowd(clock, dt); wheel.step(dt);
-  for (const f of floaters) { f.life -= dt; f.pos.y += 0.4 * dt; }
-  for (const b of bubbles) b.life -= dt;
-  for (const a of [floaters, bubbles]) for (let i = a.length - 1; i >= 0; i--) if (a[i].life <= 0) a.splice(i, 1);
 
   watchFrameRate(dt);
   if (useComposer()) { grade.uniforms.hurt.value = Math.min(1, hurtFlash); composer.render(); } else renderer.render(scene, camera);

@@ -39,7 +39,7 @@ export const WEAPONS = {
   longsword:  { name: 'Trusty Longsword',  emoji: '🗡️', len: 0.95, dmg: 1,    sever: 1,   draw: 1, swing: 1, rec: 1, stam: 1, move: 1, knock: 1,   stun: 0,    block: 1,   weight: 1.2, color: '#9fb4c7', line: 'Reliable. Boring. Effective.' },
   greatsword: { name: 'Absurd Greatsword', emoji: '⚔️', len: 1.35, dmg: 1.6, sever: 1.2, draw: 1.45, swing: 1.45, rec: 1.45, stam: 1.5, move: 0.85, two: true, grip: 0.17, knock: 1.7, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Compensating for something?' },
   dagger:     { name: 'Pointy Dagger',     emoji: '🔪', len: 0.45, dmg: 0.7,  sever: 0.8, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Get close. Get stabby.' },
-  axe:        { name: 'Limb Collector',    emoji: '🪓', len: 0.85, dmg: 1.15, sever: 1.7, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Arms? Legs? Yes.' },
+  axe:        { name: 'Limb Collector',    emoji: '🪓', len: 0.85, dmg: 1.0, sever: 1.6, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Arms? Legs? Yes.' },
   hammer:     { name: 'Bonk Hammer',       emoji: '🔨', len: 0.9,  dmg: 1.45,  sever: 0.6, draw: 1.5, swing: 1.35, rec: 1.2, stam: 1.35, move: 0.9, two: true, grip: 0.3, knock: 2.6, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
   spear:      { name: 'Very Long Stick',   emoji: '🔱', len: 1.6,  dmg: 1.1,  sever: 0.8, draw: 1.0, swing: 1.05, rec: 1.3, stam: 0.9, move: 1, two: true, grip: 0.4, knock: 1.4, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Personal space: enforced.' },
   scythe:     { name: 'Grim Scythe',       emoji: '💀', len: 1.3,  dmg: 1.3,  sever: 1.8, draw: 1.4, swing: 1.55, rec: 1.1, stam: 1.2, move: 0.9, two: true, grip: 0.4, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Harvest season.' },
@@ -48,7 +48,7 @@ export const WEAPONS = {
   trout:      { name: 'Slappy Trout',      emoji: '🐟', len: 0.75, dmg: 0.75,  sever: 0.6, draw: 0.95, swing: 1.1, rec: 0.9, stam: 0.85, move: 1, knock: 2.6, stun: 0.2,  block: 1.2, weight: 1,   color: '#7fb3a6', line: 'The ancient art of the fish slap.' },
   pan:        { name: 'Frying Pan',        emoji: '🍳', len: 0.55, dmg: 0.9,  sever: 0.5, draw: 1.05, swing: 0.8, rec: 1, stam: 1, move: 1, knock: 1.6, stun: 0.7,  block: 0.4, weight: 1,   color: '#333333', line: 'BONG. Also a great shield.' },
   fists:      { name: 'Bare Fists',        emoji: '👊', len: 0.15, dmg: 0.5,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'The wheel hates you.' },
-  excalibur:  { name: 'EXCALIBUR',         emoji: '✨', len: 1.1,  dmg: 1.6,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'JACKPOT! The legendary blade!' },
+  excalibur:  { name: 'EXCALIBUR',         emoji: '✨', len: 1.1,  dmg: 1.4,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'JACKPOT! The legendary blade!' },
 };
 export const WHEEL = Object.keys(WEAPONS); // slice order around the wheel
 
@@ -60,15 +60,15 @@ export const HITBOX = {
   longsword:  [Z(0, 0.03, 0, 0.35, 0.03, 0.6, 'near the hilt'), Z(0, 0.35, 0, 0.62, 0.03, 1), Z(0, 0.62, 0, 0.86, 0.03, 1.25, 'sweet spot'), Z(0, 0.86, 0, 0.98, 0.03, 1)],
   greatsword: [Z(0, 0.03, 0, 0.5, 0.04, 0.6, 'near the hilt'), Z(0, 0.5, 0, 0.9, 0.04, 1), Z(0, 0.9, 0, 1.22, 0.04, 1.25, 'sweet spot'), Z(0, 1.22, 0, 1.38, 0.04, 1)],
   dagger:     [Z(0, 0.02, 0, 0.3, 0.025, 0.8), Z(0, 0.3, 0, 0.47, 0.025, 1.3, 'right in the point')],
-  axe:        [Z(0, -0.1, 0, 0.65, 0.03, 0.35, 'just the handle'), Z(0.12, 0.66, 0.12, 0.84, 0.11, 1.4, 'axe head')],
-  hammer:     [Z(0, -0.08, 0, 0.74, 0.03, 0.3, 'just the handle'), Z(-0.15, 0.82, 0.15, 0.82, 0.08, 1.4, 'BONK')],
-  spear:      [Z(0, -0.1, 0, 1.45, 0.025, 0.3, 'shaft poke'), Z(0, 1.45, 0, 1.72, 0.045, 1.4, 'spear tip')],
-  // The scythe's sweet spot is the heel, where the blade meets the pole.
-  scythe:     [Z(0, -0.1, 0, 1.15, 0.03, 0.4, 'just the pole'), Z(0, 1.18, 0.12, 1.26, 0.08, 1.7, 'HEEL STRIKE'), Z(0.14, 1.25, 0.58, 1.14, 0.035, 1)],
+  axe:        [Z(0, -0.1, 0, 0.64, 0.025, 0.35, 'just the handle'), Z(0.12, 0.71, 0.12, 0.79, 0.1, 1.4, 'axe head')],
+  hammer:     [Z(0, -0.08, 0, 0.74, 0.026, 0.3, 'just the handle'), Z(-0.075, 0.82, 0.075, 0.82, 0.077, 1.4, 'BONK')],
+  spear:      [Z(0, -0.1, 0, 1.45, 0.022, 0.3, 'shaft poke'), Z(0, 1.46, 0, 1.71, 0.04, 1.4, 'spear tip')],
+  // The scythe's sweet spot is the heel, the inner part of the blade next to the pole, where it's strongest.
+  scythe:     [Z(0, -0.1, 0, 1.24, 0.024, 0.4, 'just the pole'), Z(0.01, 1.315, 0.16, 1.277, 0.05, 1.6, 'HEEL STRIKE'), Z(0.16, 1.277, 0.52, 1.186, 0.035, 1)],
   chicken:    [Z(0, 0.14, 0, 0.64, 0.085, 1), Z(0, 0.66, 0, 0.72, 0.065, 1.25, 'beak first')],
   baguette:   [Z(0, -0.05, 0, 0.5, 0.045, 0.9), Z(0, 0.5, 0, 0.8, 0.045, 1.15, 'crusty end')],
-  trout:      [Z(0, 0.1, 0, 0.5, 0.1, 1), Z(0, 0.5, 0, 0.72, 0.09, 1.25, 'face slap')],
-  pan:        [Z(0, 0, 0, 0.27, 0.02, 0.4, 'just the handle'), Z(0, 0.43, 0, 0.43, 0.17, 1.35, 'BONG')],
+  trout:      [Z(0, 0.1, 0, 0.5, 0.085, 1), Z(0, 0.5, 0, 0.7, 0.08, 1.25, 'face slap')],
+  pan:        [Z(0, -0.04, 0, 0.27, 0.02, 0.4, 'just the handle'), Z(0, 0.4, 0, 0.46, 0.14, 1.35, 'BONG')],
   fists:      [Z(0, 0.03, 0, 0.03, 0.1, 1)],
   excalibur:  [Z(0, 0.03, 0, 0.4, 0.035, 0.7, 'near the hilt'), Z(0, 0.4, 0, 0.72, 0.035, 1), Z(0, 0.72, 0, 1.0, 0.035, 1.3, 'sweet spot'), Z(0, 1.0, 0, 1.13, 0.035, 1)],
 };
@@ -462,14 +462,20 @@ function resolveSwing(room, att, def) {
   const tilt = slashTilt(att, att.saim);
   const order = att.sdir === 'over' ? ['head', 'armR', 'armL', 'torso', 'legR', 'legL']
     : tilt < -15 ? ['legR', 'legL', 'armR', 'armL', 'torso', 'head'] : ['head', 'armR', 'armL', 'torso', 'legR', 'legL'];
-  // Whichever zone connects decides the damage; when several do, the best one counts.
-  // Also check a few blade positions between last tick and this one, so quick swings can't skip past a target.
+  // The part of the weapon that actually connects decides the damage: at the first moment of contact,
+  // whichever zone is pressed deepest into the target. Several blade positions between last tick and this
+  // one are checked, so quick swings can't skip past a target, and contact is found where it first happens.
   const stNow = att.st, stPrev = Math.min(att.lastSt || 0, stNow); att.lastSt = stNow;
   let touched = [], w = null;
   for (let k = 1; k <= 4 && !w; k++) {
     att.st = stPrev + ((stNow - stPrev) * k) / 4;
     const sk = k === 4 ? ska : skeleton(att);
-    for (const z of weaponZones(att, sk)) { touched = touching(z, def, shapes, order); if (touched.length) { w = z; break; } }
+    let best = Infinity;
+    for (const z of weaponZones(att, sk)) {
+      const t = touching(z, def, shapes, order); if (!t.length) continue;
+      const depth = Math.min(...t.map((k) => segSegDist(z.a, z.b, shapes[k].a, shapes[k].b) - shapes[k].r - z.r));
+      if (depth < best) { best = depth; w = z; touched = t; }
+    }
   }
   att.st = stNow;
   if (!w) return;

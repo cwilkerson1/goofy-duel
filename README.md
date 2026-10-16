@@ -107,8 +107,9 @@ opponent's are revealed when it stops, and the fight begins.
 | ✨ EXCALIBUR | Rare jackpot. Fast, brutal, golden. Comes with a fanfare |
 
 **Hitboxes and sweet spots.** Each weapon only hits with the part of it you can see, so reach comes
-from its real shape. Where it connects decides the damage, and big yellow text tells you when you
-found the sweet spot:
+from its real shape, and the hitboxes are matched to each weapon's 3D model. Whichever part of the weapon
+makes contact first decides the damage. There are no pop-up numbers or words: a sweet-spot hit sprays more
+blood and lands with a heavy thud, while a handle or shaft hit barely bleeds.
 
 | Weapon | Sweet spot | Weak spot |
 |---|---|---|
