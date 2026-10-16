@@ -162,7 +162,7 @@ mac/               launchd file for running it as a background service on macOS
 legacy-2d/         The earlier side-view 2D version, kept for reference (not served)
 ```
 
-**Fight music.** Put music files (mp3, m4a, ogg, wav, aac, flac or webm) in `public/music/`. A track
+**Fight music.** Ten tracks come with the game (Crown of Ash, Iron Jester, Midnight Marionettes and more), and each round starts with a random one. To add your own, put music files (mp3, m4a, ogg, wav, aac, flac or webm) in `public/music/`. A track
 starts when each fight begins and fades out when the round ends; with several files, each fight picks
 a different one. No restart is needed: just refresh the page. **M** mutes music and sounds.
 
