@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy } from '/shared/sim.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
@@ -34,7 +35,6 @@ $('name').addEventListener('keydown', (e) => e.key === 'Enter' && $('go').click(
 // ---------- renderer & scene ----------
 const glCanvas = $('gl'), hud = $('hud'), hctx = hud.getContext('2d');
 const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.25;
@@ -44,8 +44,6 @@ scene.fog = new THREE.FogExp2(0x231a36, 0.02);
 const camera = new THREE.PerspectiveCamera(78, 1, 0.03, 200);
 camera.rotation.order = 'YXZ';
 // Post-processing: glow on bright things (bloom), then a soft dark vignette and a slight colour grade.
-// Add ?lowfx to the address to turn it off on a slow computer.
-const FX = !new URLSearchParams(location.search).has('lowfx');
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
 // Ambient occlusion: soft contact shadows where things meet (feet on the ground, armour plates, stone joints).
@@ -70,12 +68,40 @@ const grade = new ShaderPass({
 });
 composer.addPass(grade);
 composer.addPass(new OutputPass());
+// Graphics quality. Low: no screen effects, lower resolution. Medium (default): glow and vignette at
+// normal resolution. High: adds ambient occlusion and full Retina resolution. G cycles through them
+// (remembered on this computer), and if frames get slow the game steps down by itself. ?lowfx forces Low.
+const QUALITY = ['Low', 'Medium', 'High'];
+let quality = params.has('lowfx') ? 0 : Math.max(0, Math.min(2, Number(store.get('duel.quality') ?? 1) || 0));
+let qualityPicked = params.has('lowfx') || store.get('duel.quality') !== null, qualityToast = 0, moonLight = null;
+function applyQuality() {
+  renderer.setPixelRatio(quality === 2 ? Math.min(devicePixelRatio, 2) : quality === 1 ? 1 : 0.8);
+  gtao.enabled = quality === 2; bloom.enabled = quality >= 1;
+  // Fewer anti-aliasing samples on Medium; these multi-sample buffers are expensive on laptop GPUs.
+  for (const rt of [composer.renderTarget1, composer.renderTarget2]) { const n = quality === 2 ? 4 : 2; if (rt.samples !== n) { rt.samples = n; rt.dispose(); } }
+  if (moonLight) {
+    const size = [512, 1024, 2048][quality];
+    if (moonLight.shadow.mapSize.x !== size) { moonLight.shadow.mapSize.set(size, size); moonLight.shadow.map?.dispose(); moonLight.shadow.map = null; }
+  }
+  resize();
+}
+function setQuality(q, manual) {
+  quality = (q + 3) % 3; qualityToast = 3; applyQuality();
+  if (manual) { qualityPicked = true; store.set('duel.quality', quality); }
+}
+// Watch the frame rate for a few seconds at a time; if it's poor, drop a level (unless the player chose one).
+const perf = { t: 0, n: 0 };
+function watchFrameRate(dt) {
+  if (qualityPicked || quality === 0 || dt <= 0) return;
+  perf.t += dt; perf.n++;
+  if (perf.t >= 3) { if (perf.n / perf.t < 45) setQuality(quality - 1, false); perf.t = 0; perf.n = 0; }
+}
 function resize() {
   const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false); composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
   hud.width = w * devicePixelRatio; hud.height = h * devicePixelRatio;
 }
-addEventListener('resize', resize); resize();
+addEventListener('resize', resize); applyQuality();
 
 function canvasTexture(w, h, draw, repeat = [1, 1]) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
@@ -242,9 +268,9 @@ function buildEnvironment() {
 buildEnvironment();
 function buildArena() {
   scene.add(new THREE.HemisphereLight(0x8d84d6, 0x2a1b2e, 0.9));
-  const moon = new THREE.DirectionalLight(0xb9c8ff, 1.6);
+  const moon = moonLight = new THREE.DirectionalLight(0xb9c8ff, 1.6);
   moon.position.set(-14, 20, -10); moon.castShadow = true;
-  moon.shadow.mapSize.set(2048, 2048);
+  moon.shadow.mapSize.set(...[[512, 512], [1024, 1024], [2048, 2048]][quality]);
   Object.assign(moon.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 60 });
   scene.add(moon);
 
@@ -350,7 +376,10 @@ function buildArena() {
   };
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2 + 0.3, r = ARENA_R + rnd(8.5, 11), tree = new THREE.Group();
-    tree.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); branch(tree, rnd(4, 6), 0.35, 3); scene.add(tree);
+    branch(tree, rnd(4, 6), 0.35, 3); tree.updateMatrixWorld(true);
+    // Bake all the branches into a single mesh: one draw call per tree instead of dozens.
+    const parts = []; tree.traverse((o) => { if (o.isMesh) parts.push(o.geometry.clone().applyMatrix4(o.matrixWorld)); });
+    const merged = new THREE.Mesh(mergeGeometries(parts), barkMat); merged.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); scene.add(merged);
   }
 
   // Night sky: a gradient dome glowing faintly toward the moon, with drifting clouds.
@@ -794,6 +823,7 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;
+  if (e.code === 'KeyG' && !e.repeat) setQuality(quality + 1, true);
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
   if (e.code === 'Space') e.preventDefault();
 });
@@ -953,6 +983,7 @@ function drawHud(players, me, opp) {
   hctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   hctx.clearRect(0, 0, w, h);
   if (hurtFlash > 0) { hctx.fillStyle = `rgba(200,0,0,${hurtFlash * 0.35})`; hctx.fillRect(0, 0, w, h); }
+  if (qualityToast > 0) { hctx.globalAlpha = Math.min(1, qualityToast); text(`Graphics: ${QUALITY[quality]}  (press G to change)`, w / 2, h - 44, 16, '#fff'); hctx.globalAlpha = 1; }
 
   // Floating damage numbers and speech bubbles.
   for (const f of floaters) { const s = project(f.pos); if (!s) continue; hctx.globalAlpha = Math.min(1, f.life * 2); text(f.text, s[0], s[1], f.big ? 30 : 20, f.color); hctx.globalAlpha = 1; }
@@ -1004,7 +1035,7 @@ function drawHud(players, me, opp) {
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   if (joined && !locked()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
-  hctx.fillText('WASD move · hold left click, steer, release to swing · hold right click + steer to block · right click mid-swing feints · F kick · M mute', w / 2, h - 14);
+  hctx.fillText('WASD move · hold left click, steer, release to swing · hold right click + steer to block · right click mid-swing feints · F kick · M mute · G graphics', w / 2, h - 14);
 }
 
 // ---------- the Wheel of Weapons ----------
@@ -1107,7 +1138,7 @@ function frame(now) {
     lastPhase = cur.phase;
   }
   music.step(dt);
-  fightFlash = Math.max(0, fightFlash - dt);
+  fightFlash = Math.max(0, fightFlash - dt); qualityToast = Math.max(0, qualityToast - dt);
   if (me) sendInput(dt);
 
   // Sync knight meshes with the players in the arena.
@@ -1151,7 +1182,8 @@ function frame(now) {
   for (const b of bubbles) b.life -= dt;
   for (const a of [floaters, bubbles]) for (let i = a.length - 1; i >= 0; i--) if (a[i].life <= 0) a.splice(i, 1);
 
-  if (FX) { grade.uniforms.hurt.value = Math.min(1, hurtFlash); composer.render(); } else renderer.render(scene, camera);
+  watchFrameRate(dt);
+  if (quality >= 1) { grade.uniforms.hurt.value = Math.min(1, hurtFlash); composer.render(); } else renderer.render(scene, camera);
   drawHud(players, me, opp);
   requestAnimationFrame(frame);
 }

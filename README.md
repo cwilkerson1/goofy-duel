@@ -57,6 +57,7 @@ mouse (press **Esc** to let go).
 | Feint | Right click while drawing back cancels the attack. Or switch sides just before you release. |
 | Kick | **F** (or a side mouse button). Kicks can't be blocked, they knock the target back and cancel what they were doing, and they're short range. |
 | Mute | **M** |
+| Graphics quality (Low / Medium / High) | **G** |
 
 **Reading attacks.** There are no hints. Watch where their weapon is drawn back to: a swing drawn on
 *their* right arrives on *your* left. The only glow is white, when their attack has become a heavy.
@@ -169,7 +170,9 @@ a different one. No restart is needed: just refresh the page. **M** mutes music 
 **Graphics.** The knights wear great helms, mail and team-coloured surcoats, and fight in a moonlit stone
 arena. All textures (stone, earth, wood, mail, steel, cloth) are generated in code when the page loads,
 so there are no image files to download. On top of that there's ambient occlusion (soft contact shadows),
-glow, reflections and a vignette. On a slow computer, add `?lowfx` to the end of the address to turn the
-screen effects off.
+glow, reflections and a vignette. There are three graphics levels: **Low**, **Medium** (the default) and **High** (adds ambient
+occlusion and full Retina resolution). Press **G** in game to switch; your choice is remembered on that
+computer. If the game runs slowly, it drops a level by itself until you pick one. Adding `?lowfx` to the
+address forces Low.
 
 Tuning knobs (timings in `T`, stamina costs in `COST`, damage and swing arcs in `SWING`, part health) are at the top of `shared/sim.js`.
