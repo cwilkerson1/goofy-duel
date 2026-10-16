@@ -1,4 +1,4 @@
-// Goofy Duel server: serves the browser client and runs the authoritative
+// Arena Roulette server: serves the browser client and runs the authoritative
 // simulation. No npm dependencies; WebSocket handling is built in below.
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -193,7 +193,7 @@ function tick() {
 }
 
 server.listen(PORT, HOST, () => {
-  console.log(`Goofy Duel running on port ${PORT}`);
+  console.log(`Arena Roulette running on port ${PORT}`);
   console.log(`  This machine:  http://localhost:${PORT}`);
   for (const list of Object.values(os.networkInterfaces()))
     for (const a of list || []) if (a.family === 'IPv4' && !a.internal) console.log(`  On your LAN:   http://${a.address}:${PORT}`);

@@ -1,4 +1,6 @@
-# ⚔️ Goofy Duel
+# ⚔️ Arena Roulette
+
+(Formerly Goofy Duel. The repository, the `goofy-duel` folder and the Mac mini service keep their old names so existing setups keep working.)
 
 A silly first-person sword duel in a haunted Halloween arena, played in the browser, with Last Oasis-style
 directional combat. Arms, legs and heads come off, and the crowd of monsters loves it.
@@ -23,7 +25,7 @@ dead trees, ghosts drifting over the stands, bats overhead, and a wolf howl at t
    ```
 4. The terminal prints the addresses to open, for example:
    ```
-   Goofy Duel running on port 3000
+   Arena Roulette running on port 3000
      This machine:  http://localhost:3000
      On your LAN:   http://192.168.1.42:3000
    ```
