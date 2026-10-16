@@ -90,7 +90,7 @@ const PHASE = { DRAW: 'draw', HEAVY_AT: 'draw', ACTIVE: 'swing', CHAMBER: 'swing
 export const armsLeft = (p) => (p.parts.armR.cut ? 0 : 1) + (p.parts.armL.cut ? 0 : 1);
 // A two-hander with only one arm left to swing it.
 export const oneHanding = (p) => !!wpn(p).two && armsLeft(p) < 2;
-const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1); // weapon-scaled timing
+export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1); // weapon-scaled timing
 
 // Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
 export const BLEED = { fresh: 1.2, trickle: 0.4, ease: 0.05 };
@@ -167,8 +167,10 @@ export function swordLocal(p) {
   }
   const tilt = slashTilt(p, p.saim);
   if (p.state === 'active') {
-    const k = clamp(p.st / tm(p, 'ACTIVE'), 0, 1);
-    return swingPose(lerp(s.a[0], s.a[1], k), lerp(s.p[0], s.p[1] + chopTilt(p, p.saim), k) + tilt);
+    // The blade leaves from exactly where it was drawn back to, picks up speed, and slows into the
+    // follow-through, so there's no jump at release and no robotic constant-speed sweep.
+    const u = clamp(p.st / tm(p, 'ACTIVE'), 0, 1), k = u * u * (3 - 2 * u);
+    return swingPose(lerp(s.wa, s.a[1], k), lerp(s.wp, s.p[1] + chopTilt(p, p.saim), k) + tilt);
   }
   if (p.state === 'recover') {
     const k = ease(clamp(p.st / p.recDur, 0, 1));
@@ -239,7 +241,8 @@ export function skeleton(p) {
   const holder = swordArm(p);
   let hand = null, tip = null;
   if (holder) {
-    const s = swordLocal(p);
+    // p.swordPose: the browser passes a smoothed copy of swordLocal so the weapon glides between poses.
+    const s = p.swordPose || swordLocal(p);
     // An off-hand holder shifts the grip over to its own side.
     const ho = holder === 'armL' ? [s.hand[0], s.hand[1] - 0.3, s.hand[2]] : s.hand;
     hand = L(neck, ho[0], ho[1], ho[2]);

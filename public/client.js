@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
@@ -732,6 +732,17 @@ class Knight {
       else em.copy(this.sword.userData.baseEmissive);
     }
   }
+  // The weapon glides toward where the rules say it is instead of jumping there, so changing guard,
+  // raising a block, winding up and getting knocked about all flow. Swings follow almost exactly.
+  glide(p, dt) {
+    const t = swordLocal(p), key = p.weapon + ':' + p.spawn + ':' + p.dead;
+    if (!this.sw || this.swKey !== key) { this.sw = { hand: t.hand.slice(), dir: t.dir.slice() }; this.swKey = key; return t; }
+    const rate = p.state === 'active' ? 45 : p.state === 'kick' ? 30 : p.blocking ? 26 : p.dead ? 10 : 18, k = 1 - Math.exp(-rate * dt);
+    const w = this.sw;
+    for (let i = 0; i < 3; i++) { w.hand[i] += (t.hand[i] - w.hand[i]) * k; w.dir[i] += (t.dir[i] - w.dir[i]) * k; }
+    const l = Math.hypot(...w.dir) || 1; w.dir = w.dir.map((v) => v / l);
+    return { hand: w.hand.slice(), dir: w.dir.slice() };
+  }
   dispose() { scene.remove(this.root); }
 }
 const knights = new Map();
@@ -928,7 +939,11 @@ addEventListener('mousedown', (e) => {
   if (!joined || menu.isOpen()) return;
   audio.init();
   if (!locked()) { lockPointer(); return; }
-  if (e.button === 0) { atkHeld = true; send({ t: 'hold', d: dir }); }
+  if (e.button === 0) {
+    atkHeld = true; send({ t: 'hold', d: dir });
+    const s = cur && cur.players.find((q) => q && q.id === myId);
+    if (s && !s.dead && s.state === 'idle' && s.stam >= 5) swingIntent = { pressT: performance.now(), relT: null, b: isBlocking() };
+  }
   if (e.button === 2) blockHeld = true;
   if (e.button === 3 || e.button === 4) send({ t: 'kick' });
 });
@@ -937,6 +952,35 @@ addEventListener('mouseup', (e) => {
   if (e.button === 2) blockHeld = false;
 });
 const isBlocking = () => blockHeld || keys.has('ShiftLeft') || keys.has('ShiftRight');
+
+// Your own guard and swings are shown the moment you act, instead of a round trip to the server
+// later: the newest server state, run forward, plus your block, guard side and wind-up predicted
+// from your own inputs. The server still decides every hit; this only moves your weapon sooner.
+let swingIntent = null; // { pressT, relT, b, dir, aim }: a swing you started that the server hasn't shown yet
+function predictMyAction(p, now) {
+  const s = cur && cur.players.find((q) => q && q.id === myId);
+  if (!s || s.dead || p.dead) { swingIntent = null; return p; }
+  const age = Math.max(0, Math.min(0.1, (now - curT) / 1000)); // now is the frame's start, which can be before the update arrived
+  const o = { ...p, state: s.state, st: s.st + age, sdir: s.sdir, heavy: s.heavy, saim: s.saim, recDur: s.recDur,
+    blocking: s.blocking, gdir: s.gdir, stun: Math.max(0, s.stun - age), riposte: s.riposte };
+  const free = o.stun <= 0 && !(p.downT > 0), I = swingIntent, wait = Math.max(250, (pred.rtt ?? 100) * 1.5 + 80);
+  if (I) {
+    if (!atkHeld && I.relT === null) Object.assign(I, { relT: now, dir, aim: look.pitch * 180 / Math.PI });
+    if (!isBlocking()) I.b = false;
+    const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
+    if (s.state !== 'idle' && s.state !== 'hold') swingIntent = null; // the server has caught up
+    else if (!free || (I.relT === null && isBlocking() && !I.b)) swingIntent = null; // stunned, or feinted
+    else if (s.state === 'idle' && now - I.pressT > wait && now - go < 0) swingIntent = null; // the server said no
+    else if (now - go > tm(o, 'ACTIVE') * 1000 + wait) swingIntent = null;
+  }
+  if (swingIntent) {
+    const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
+    if (now < go) Object.assign(o, { state: 'hold', st: (now - I.pressT) / 1000, sdir: dir, heavy: false, blocking: false });
+    else Object.assign(o, { state: 'active', st: (now - go) / 1000, sdir: I.dir, saim: I.aim, heavy: (go - I.pressT) / 1000 >= tm(o, 'HEAVY_AT'), blocking: false });
+  } else if (o.state === 'idle' && free) Object.assign(o, { blocking: isBlocking(), gdir: dir });
+  else if (o.state === 'hold') o.sdir = dir;
+  return o;
+}
 
 const moveFwd = () => (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
 const moveSide = () => (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -1236,6 +1280,7 @@ function frame(now) {
     me = { ...me, x: pred.x, y: pred.y, z: pred.z, vx: pred.vx, vz: pred.vz, walk: pred.walk, onGround: pred.onGround };
     players[players.findIndex((p) => p && p.id === myId)] = me;
   }
+  if (me && !debugPose) { me = predictMyAction(me, now); players[players.findIndex((p) => p && p.id === myId)] = me; }
   if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(); }
@@ -1258,6 +1303,7 @@ function frame(now) {
     // Use the local mouse look for our own body so the sword follows the camera instantly.
     const pose = isMe && !p.dead ? { ...p, yaw: look.yaw, pitch: look.pitch, breath: clock, lag: turnLag } : { ...p, breath: clock + p.id * 1.7 };
     footsteps(p, isMe);
+    pose.swordPose = k.glide(pose, dt);
     k.update(pose, skeleton(pose), isMe && !p.dead);
   }
 
