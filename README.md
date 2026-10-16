@@ -59,7 +59,7 @@ mouse (press **Esc** to let go).
 | Feint | Right click while drawing back cancels the attack. Or switch sides just before you release. |
 | Kick | **F** (or a side mouse button). Kicks can't be blocked, they knock the target back and cancel what they were doing, and they're short range. |
 | Mute | **M** |
-| Settings menu (graphics, mouse, volume) | **Esc** (or ⚙ Settings on the start screen) |
+| Settings menu (graphics, mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
 | Cycle graphics preset (Low / Medium / High) | **G** |
 
 **Reading attacks.** There are no hints. Watch where their weapon is drawn back to: a swing drawn on

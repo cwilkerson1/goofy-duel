@@ -865,22 +865,24 @@ const menu = (() => {
     // The plain (no effects) view gets its smooth edges from the browser, which only changes on reload.
     $('aaNote').textContent = !useComposer() && (S.aa > 0) !== startAA ? 'Anti-aliasing will switch over next time you load the page.' : '';
   }
-  const open = () => { refresh(); root.classList.add('open'); keys.clear(); blockHeld = false; if (atkHeld) { atkHeld = false; send({ t: 'release' }); } $('menuClose').textContent = joined ? 'Back to the fight' : 'Done'; };
+  const open = () => { refresh(); root.classList.add('open'); keys.clear(); blockHeld = false; if (atkHeld) { atkHeld = false; send({ t: 'release' }); } $('menuClose').textContent = joined ? 'Back to the fight' : 'Done'; $('menuLeave').style.display = joined ? '' : 'none'; };
   const close = () => root.classList.remove('open');
   $('menuClose').onclick = () => { if (joined) lockPointer(); else close(); };
   $('gear').onclick = open;
+  // Leaving frees your spot (the first person watching steps in) and takes you back to the start screen.
+  $('menuLeave').onclick = () => { leaving = true; music.stop(); if (ws) ws.close(); location.reload(); };
   document.addEventListener('pointerlockchange', () => { if (locked()) close(); else if (joined) open(); });
   return { open, close, refresh, isOpen: () => root.classList.contains('open') };
 })();
 
 // ---------- network ----------
-let ws = null, myId = null, connected = false;
+let ws = null, myId = null, connected = false, leaving = false;
 let prev = null, cur = null, prevT = 0, curT = 0, mySpawn = -1;
 function connect(name, room) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`);
   ws.onopen = () => { connected = true; send({ t: 'ping', c: performance.now() }); };
-  ws.onclose = () => { connected = false; setTimeout(() => connect(name, room), 1500); };
+  ws.onclose = () => { connected = false; if (!leaving) setTimeout(() => connect(name, room), 1500); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'welcome') { myId = m.id; return; }

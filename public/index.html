@@ -31,7 +31,7 @@
   #menu input[type=range] { width: 150px; accent-color: #e8740c; }
   #menu .val { width: 46px; text-align: right; color: #c9bfe0; font-size: 13px; }
   #menu .note { font-size: 12px; color: #a99fc4; margin: 6px 0 0; }
-  #menu .buttons { display: flex; gap: 10px; margin-top: 18px; }
+  #menu .buttons { display: flex; gap: 10px; margin-top: 12px; position: sticky; bottom: -22px; background: #2c2440; padding: 12px 0 22px; margin-bottom: -22px; }
   #menu button { flex: 1; font: inherit; font-size: 17px; padding: 11px; border: 0; border-radius: 10px; background: #e8740c; color: #fff; cursor: pointer; }
   #menu button.ghost { background: transparent; border: 2px solid #4a3d6b; }
   #menu button:hover { filter: brightness(1.1); }
@@ -64,7 +64,7 @@
   <h2>⚙ Settings</h2>
   <div id="menuRows"></div>
   <p class="note" id="aaNote"></p>
-  <div class="buttons"><button id="menuClose">Back to the fight</button></div>
+  <div class="buttons"><button id="menuClose">Back to the fight</button><button id="menuLeave" class="ghost">Leave the arena</button></div>
 </div></div>
 <script type="module" src="/client.js"></script>
 </body>
