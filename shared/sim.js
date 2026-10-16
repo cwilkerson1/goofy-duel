@@ -36,6 +36,7 @@ export const T = {
 // len: blade reach in metres. dmg: overall damage. sever: extra damage to limbs and heads.
 // Swing feel (lower is faster): draw = wind-up, swing = how long the blade takes to cross,
 // rec = recovery after a swing or bounce. stam: stamina per swing/feint. move: footwork speed.
+// small: a small weapon that skips the overall PACE slowdown.
 // two: a two-handed weapon (the big ones): both hands on the grip, slower, hits harder. grip: how far
 // down the handle the second hand sits. Swung with one arm left, it's slower still and hits softer.
 // knock: shove on hit (big = launch).
@@ -44,7 +45,7 @@ export const T = {
 export const WEAPONS = {
   longsword:  { name: 'Longsword',         emoji: '🗡️', len: 0.95, dmg: 1,    sever: 1,   draw: 1, swing: 1, rec: 1, stam: 1, move: 1, knock: 1,   stun: 0,    block: 1,   weight: 1.2, color: '#9fb4c7', line: 'Reach and speed in balance.' },
   greatsword: { name: 'Greatsword',        emoji: '⚔️', len: 1.35, dmg: 1.6, sever: 1.2, draw: 1.45, swing: 1.35, rec: 1.45, stam: 1.5, move: 0.85, two: true, grip: 0.17, knock: 1.7, stun: 0,    block: 0.8, weight: 1,   color: '#5d7fa3', line: 'Two hands, huge arcs, huge hits.' },
-  dagger:     { name: 'Rondel Dagger',     emoji: '🔪', len: 0.45, dmg: 0.7,  sever: 0.5, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Tiny reach, lightning quick.' },
+  dagger:     { name: 'Rondel Dagger',     emoji: '🔪', small: true, len: 0.45, dmg: 0.7,  sever: 0.5, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Tiny reach, lightning quick.' },
   axe:        { name: 'Battle Axe',        emoji: '🪓', len: 0.85, dmg: 1.0, sever: 1.6, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Takes limbs off clean.' },
   hammer:     { name: 'War Hammer',        emoji: '🔨', len: 0.9,  dmg: 1.45,  sever: 0.6, draw: 1.5, swing: 1.35, rec: 1.2, stam: 1.35, move: 0.9, two: true, grip: 0.3, knock: 2.6, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
   spear:      { name: 'Spear',             emoji: '🔱', len: 1.6,  dmg: 1.25,  sever: 0.5, draw: 1.0, swing: 1.05, rec: 1.3, stam: 0.9, move: 1, two: true, grip: 0.4, knock: 1.4, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Keep them at the point.' },
@@ -53,7 +54,7 @@ export const WEAPONS = {
   mace:       { name: 'Flanged Mace',      emoji: '⚒️', len: 0.75, dmg: 1.2, sever: 0.6, draw: 1, swing: 1, rec: 1, stam: 1.05, move: 1, knock: 1.8, stun: 0.35, block: 1.1, weight: 1,   color: '#8a8f96', line: 'Dents helmets, rattles skulls.' },
   flail:      { name: 'Flail',             emoji: '⛓️', len: 0.86, dmg: 1.15, sever: 0.7, draw: 1.1, swing: 1.25, rec: 1.1, stam: 1.15, move: 1, knock: 2.4, stun: 0.3,  block: 1.3, weight: 1,   color: '#6f6a64', line: 'Hard to block with, harder to be hit by.' },
   pick:       { name: 'War Pick',          emoji: '⛏️', len: 0.8,  dmg: 1.25,  sever: 0.6, draw: 1.15, swing: 0.95, rec: 1.15, stam: 1.1, move: 0.95, knock: 1.2, stun: 0.25, block: 1, weight: 1,   color: '#5f6670', line: 'Punches straight through plate.' },
-  fists:      { name: 'Bare Fists',        emoji: '👊', len: 0.15, dmg: 0.5,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'No weapon this round. Good luck.' },
+  fists:      { name: 'Bare Fists',        emoji: '👊', small: true, len: 0.15, dmg: 0.5,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'No weapon this round. Good luck.' },
   excalibur:  { name: 'Excalibur',         emoji: '✨', len: 1.1,  dmg: 1.4,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'Jackpot! The legendary blade.' },
 };
 export const WHEEL = Object.keys(WEAPONS); // slice order around the wheel
@@ -98,7 +99,9 @@ export const armsLeft = (p) => (p.parts.armR.cut ? 0 : 1) + (p.parts.armL.cut ? 
 export const oneHanding = (p) => !!wpn(p).two && armsLeft(p) < 2;
 // Heavy attacks swing a third slower and take a bit longer to recover from.
 const HEAVY_TIME = { ACTIVE: 1.35, RECOVER: 1.2, CHAMBER: 1.35 };
-export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) // weapon-scaled timing
+// Everything but the small weapons swings this much slower overall. The heavy-attack charge keeps its own timing.
+export const PACE = 1.3;
+export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' && PHASE[k] && !wpn(p).small ? PACE : 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) // weapon-scaled timing
   * (p.heavy && p.state !== 'hold' ? HEAVY_TIME[k] ?? 1 : 1);
 
 // Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
