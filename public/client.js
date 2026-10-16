@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
@@ -639,6 +639,7 @@ const surcoatTex = (color, skirt) => canvasTexture(256, 256, (g, w, h) => {
   g.fillRect(w * 0.5 - 9, h * 0.18, 18, h * 0.42); g.fillRect(w * 0.5 - 34, h * 0.28, 68, 16); // the cross sits on the front (u = 0.5)
 });
 const _qYaw = new THREE.Quaternion();
+const _qTumble = new THREE.Quaternion(), _vAxis = new THREE.Vector3();
 class Knight {
   constructor(color) {
     this.color = color;
@@ -671,25 +672,19 @@ class Knight {
       const hurt = Math.min(1, 1 - p.parts[k].hp / PART_MAX[k] + (k === 'torso' ? (p.bruise || 0) * 0.15 : 0));
       mat.color.copy(mat.userData.base).lerp(BRUISE, hurt * 0.75);
     }
-    // Fall over when dead (unless the headless body is still sprinting around).
-    const running = p.headless && p.deathT < 2.6 && (!cut('legR') || !cut('legL'));
-    const fallK = p.dead && !running ? Math.min(1, (p.headless ? p.deathT - 2.6 : p.deathT) / 0.5) : 0;
+    // Falling down (knocked over, or dead weight) is already in the skeleton; tq turns the pieces
+    // that are placed by facing (head, boots, buckle) along with the body.
     this.root.position.set(0, 0, 0); this.root.quaternion.identity();
-    if (fallK > 0) {
-      const pivot = new THREE.Vector3(p.x, p.y, p.z), f = forward(p.yaw);
-      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(f[2], 0, -f[0]).normalize(), fallK * 1.5); // topple backwards
-      this.root.quaternion.copy(q);
-      this.root.position.copy(pivot).sub(pivot.clone().applyQuaternion(q));
-      this.root.position.y += 0.05 * fallK;
-    }
+    const tb = tumble(p), tq = _qTumble.identity();
+    if (tb.angle) tq.setFromAxisAngle(_vAxis.set(...tb.axis).normalize(), tb.angle);
     const P = {};
     for (const [k, v] of Object.entries(sk)) if (Array.isArray(v) && v.length === 3) P[k] = V(v);
     this.torso.visible = this.belt.visible = this.buckle.visible = this.skirt.visible = !firstPerson;
     seg(this.torso, P.hip, P.neck); this.torso.quaternion.multiply(_qYaw.setFromAxisAngle(UP, p.yaw)); // keep the chest facing forward
     this.skirt.position.copy(P.hip); this.skirt.quaternion.copy(this.torso.quaternion);
-    const up = P.neck.clone().sub(P.hip).normalize(), f = forward(p.yaw), fw = new THREE.Vector3(f[0], 0, f[2]);
+    const up = P.neck.clone().sub(P.hip).normalize(), f = forward(p.yaw), fw = new THREE.Vector3(f[0], 0, f[2]).applyQuaternion(tq);
     this.belt.position.copy(P.hip).addScaledVector(up, 0.07); this.belt.quaternion.copy(this.torso.quaternion);
-    this.buckle.position.copy(this.belt.position).addScaledVector(fw, 0.185); this.buckle.rotation.set(0, p.yaw, 0);
+    this.buckle.position.copy(this.belt.position).addScaledVector(fw, 0.185); this.buckle.quaternion.setFromAxisAngle(UP, p.yaw).premultiply(tq);
     for (const [pd, key, sh] of [[this.pauldR, 'armR', P.shR], [this.pauldL, 'armL', P.shL]]) {
       pd.visible = !firstPerson && !cut(key); if (!pd.visible) continue;
       pd.position.copy(sh).addScaledVector(up, 0.02); pd.quaternion.copy(this.torso.quaternion); pd.scale.set(1.05, 0.8, 1.05);
@@ -707,8 +702,8 @@ class Knight {
       if (on && firstPerson) L.thigh.visible = this.knees[i].visible = false; // the thigh would fill the screen
       if (!on) return;
       seg(L.thigh, P[h], P[kn]); seg(L.shin, P[kn], P[ft].clone().lerp(P[kn], 0.1));
-      this.knees[i].position.copy(P[kn]).addScaledVector(new THREE.Vector3(sk.f[0], 0, sk.f[2]), 0.04);
-      L.boot.position.set(P[ft].x + sk.f[0] * 0.06, P[ft].y + 0.05, P[ft].z + sk.f[2] * 0.06); L.boot.rotation.y = p.yaw;
+      this.knees[i].position.copy(P[kn]).addScaledVector(new THREE.Vector3(sk.f[0], 0, sk.f[2]).applyQuaternion(tq), 0.04);
+      L.boot.position.copy(P[ft]).add(new THREE.Vector3(sk.f[0] * 0.06, 0.05, sk.f[2] * 0.06).applyQuaternion(tq)); L.boot.quaternion.setFromAxisAngle(UP, p.yaw).premultiply(tq);
     });
     [['head', P.neck], ['armR', P.shR], ['armL', P.shL], ['legR', P.hipR], ['legL', P.hipL]].forEach(([k, pos], i) => {
       const s = this.stumps[i]; s.visible = cut(k) && !(firstPerson && (k === 'head' || k.startsWith('leg'))); if (!s.visible) return;
@@ -718,7 +713,7 @@ class Knight {
     this.head.visible = !firstPerson && !cut('head');
     if (this.head.visible) {
       this.head.position.copy(P.head);
-      this.head.rotation.set(p.dead ? 0 : p.pitch * 0.6, p.yaw, 0);
+      this.head.rotation.set(p.dead ? 0 : p.pitch * 0.6, p.yaw, 0); this.head.quaternion.premultiply(tq);
       this.head.userData.mouth.scale.setScalar(p.state === 'active' || p.stun > 0 ? 1.8 : 1);
     }
     if (p.weapon && p.weapon !== this.weaponId) {
@@ -989,7 +984,8 @@ function handleEvent(ev) {
     case 'guardbreak': audio.thud(); if (mine) shake = 0.08; break;
     case 'kickSwing': audio.whoosh('low'); break;
     case 'kickMiss': audio.whoosh('low'); if (mine) shake = 0.05; break;
-    case 'kick': audio.thud(); if (mine) { shake = 0.1; hurtFlash = 0.4; } break;
+    case 'kick': audio.thud(); setTimeout(() => audio.thud(), 300); // the boot, then the body hitting the floor
+      if (mine) { shake = 0.1; hurtFlash = 0.4; } break;
     case 'death': audio.slide(); break;
     case 'jump': if (mine) audio.boing(1); break;
     case 'hop': audio.boing(1.6, mine ? 0.12 : 0.06); break;
@@ -1029,7 +1025,8 @@ function blendPlayer(q, p, k) {
   if (!q || Math.hypot(q.x - p.x, q.z - p.z) > 2 || q.spawn !== p.spawn) return p; // teleported (new round): don't slide
   const L = (a, b) => a + (b - a) * k;
   const dy = Math.atan2(Math.sin(p.yaw - q.yaw), Math.cos(p.yaw - q.yaw));
-  const out = { ...(k < 0.5 ? q : p), x: L(q.x, p.x), y: L(q.y, p.y), z: L(q.z, p.z), yaw: q.yaw + dy * k, walk: L(q.walk, p.walk), stun: L(q.stun, p.stun), deathT: L(q.deathT, p.deathT) };
+  const out = { ...(k < 0.5 ? q : p), x: L(q.x, p.x), y: L(q.y, p.y), z: L(q.z, p.z), yaw: q.yaw + dy * k, walk: L(q.walk, p.walk), stun: L(q.stun, p.stun), deathT: L(q.deathT, p.deathT),
+    downT: q.downT > 0 && p.downT > 0 ? L(q.downT, p.downT) : p.downT, fallYaw: p.fallYaw };
   // swing timers only blend within the same move; across a change of move, take the newer one
   if (q.state === p.state) out.st = L(q.st, p.st); else { out.state = p.state; out.st = p.st; out.sdir = p.sdir; out.heavy = p.heavy; }
   out.parts = p.parts; out.dead = p.dead; out.weapon = p.weapon; out.blocking = p.blocking; out.gdir = p.gdir;
@@ -1052,7 +1049,7 @@ function interpPlayers() {
     if (!pa || !pb) return p;
     // positions come from the buffered moment; health, limbs and death are always the latest
     const o = blendPlayer(pa, pb, k);
-    return { ...o, parts: p.parts, dead: p.dead, deathT: p.dead ? o.deathT : 0, headless: p.headless, weapon: p.weapon, score: p.score, stam: p.stam, bleed: p.bleed, bruise: p.bruise, color: p.color, name: p.name };
+    return { ...o, parts: p.parts, dead: p.dead, deathT: p.dead ? o.deathT : 0, fallYaw: p.dead ? p.fallYaw : o.fallYaw, headless: p.headless, weapon: p.weapon, score: p.score, stam: p.stam, bleed: p.bleed, bruise: p.bruise, color: p.color, name: p.name };
   });
 }
 
@@ -1272,7 +1269,10 @@ function frame(now) {
     const gk = me.onGround ? Math.min(1, Math.hypot(me.vx || 0, me.vz || 0) / 2.4) : 0;
     // Kicking: the view tips down a little to follow your boot. Stumbling after a miss: the view wobbles.
     const kc = kickCurve(me), wob = me.stun > 0 ? Math.sin(clock * 17) * 0.05 * Math.min(1, me.stun * 2) : 0;
-    camera.rotation.set(look.pitch - 0.38 * Math.max(kc.knee * 0.55, kc.ext), look.yaw, 0.012 * gk * Math.sin(me.walk || 0) + wob);
+    // Knocked down: the view goes with your head, so landing on your back you're staring at the sky.
+    const tb = tumble(me), fd = forward(me.fallYaw ?? 0), lf = forward(look.yaw);
+    const fallPitch = tb.angle ? -(fd[0] * lf[0] + fd[2] * lf[2]) * tb.angle * 0.9 : 0;
+    camera.rotation.set(Math.max(-1.5, Math.min(1.5, look.pitch - 0.38 * Math.max(kc.knee * 0.55, kc.ext) + fallPitch)), look.yaw, 0.012 * gk * Math.sin(me.walk || 0) + wob);
   } else if (me && myHeadGib) {
     // Your head is the camera now. Enjoy the ride.
     camera.position.copy(myHeadGib.g.position);

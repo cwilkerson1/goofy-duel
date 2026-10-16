@@ -30,7 +30,7 @@ export function makePredictor() {
     const accel = this.onGround ? ACCEL : 2;
     this.vx += (goal.vx - this.vx) * Math.min(1, accel * dt);
     this.vz += (goal.vz - this.vz) * Math.min(1, accel * dt);
-    if (this.onGround && legs && inp.j && s.stun <= 0 && s.stam >= COST.jump) { this.vy = legs === 2 ? 5.2 : 4; this.onGround = false; }
+    if (this.onGround && legs && inp.j && s.stun <= 0 && !(s.downT > 0) && s.stam >= COST.jump) { this.vy = legs === 2 ? 5.2 : 4; this.onGround = false; }
     else if (this.onGround && legs === 1 && ml > 0.1 && s.state !== 'kick') { this.vy = 2.6; this.onGround = false; }
     this.vy -= 14 * dt;
     this.x += this.vx * dt; this.y += this.vy * dt; this.z += this.vz * dt;

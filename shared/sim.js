@@ -96,7 +96,7 @@ const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k]
 export const BLEED = { fresh: 1.2, trickle: 0.4, ease: 0.05 };
 // Bruising from blunt hits, in health per second: it throbs at first, then eases to a dull ache.
 export const BRUISE = { perDamage: 0.03, linger: 0.3, ease: 0.05 };
-export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 15, feint: 6, jump: 6 };
+export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 65, kickMin: 40, feint: 6, jump: 6 };
 
 // Directions name the side the weapon is drawn back on, from the attacker's point of view.
 // The blade arrives on the defender's opposite side, so they block with the mirrored direction.
@@ -128,7 +128,7 @@ export function moveGoal(p, mf, ms, yaw, blocking) {
   let speed = (legs === 2 ? WALK_SPEED : legs === 1 ? 2 : 0.9) * wpn(p).move;
   if (p.state === 'hold') speed *= isHeavy(p) ? 0.45 : 0.65;
   else if (p.state !== 'idle' || blocking) speed *= 0.5;
-  if (p.stun > 0) speed = 0;
+  if (p.stun > 0 || p.downT > 0) speed = 0;
   const f = forward(yaw), r = rightOf(yaw), fw = mf > 0 ? mf : mf * 0.65, sd = ms * 0.8;
   let mx = f[0] * fw + r[0] * sd, mz = f[2] * fw + r[2] * sd;
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
@@ -136,7 +136,10 @@ export function moveGoal(p, mf, ms, yaw, blocking) {
 }
 export const isHeavy = (p) => (p.state === 'hold' && p.st >= tm(p, 'HEAVY_AT')) || (p.state === 'active' && p.heavy);
 // How far up/down a side slash is aimed, from the head pitch in degrees.
-const slashTilt = (p, deg) => (p.sdir === 'over' ? 0 : clamp(deg, -45, 25) * 0.9);
+// Looking well down (at someone lying on the ground) bends the swing down to the floor.
+const slashTilt = (p, deg) => (p.sdir === 'over' ? 0 : clamp(deg, -75, 25) * 0.9);
+// An overhead chop follows through lower when you look down.
+const chopTilt = (p, deg) => (p.sdir === 'over' ? clamp(deg + 25, -35, 0) : 0);
 
 // Local (forward, right, up) direction from blade yaw/pitch in degrees.
 const bladeDir = (a, p) => [Math.cos(p * D2R) * Math.cos(a * D2R), Math.cos(p * D2R) * Math.sin(a * D2R), Math.sin(p * D2R)];
@@ -165,11 +168,11 @@ export function swordLocal(p) {
   const tilt = slashTilt(p, p.saim);
   if (p.state === 'active') {
     const k = clamp(p.st / tm(p, 'ACTIVE'), 0, 1);
-    return swingPose(lerp(s.a[0], s.a[1], k), lerp(s.p[0], s.p[1], k) + tilt);
+    return swingPose(lerp(s.a[0], s.a[1], k), lerp(s.p[0], s.p[1] + chopTilt(p, p.saim), k) + tilt);
   }
   if (p.state === 'recover') {
     const k = ease(clamp(p.st / p.recDur, 0, 1));
-    return mix(swingPose(s.a[1], s.p[1] + tilt), guardPose(p), k);
+    return mix(swingPose(s.a[1], s.p[1] + chopTilt(p, p.saim) + tilt), guardPose(p), k);
   }
   return guardPose(p);
 }
@@ -251,12 +254,48 @@ export function skeleton(p) {
   }
   // The free arm flails goofily.
   const fl = -Math.sin(w) * 0.22 * k + Math.sin(w * 1.3 + 1) * 0.08 * (1 - k) + (p.stun > 0 ? Math.sin(p.stun * 30) * 0.4 : 0);
-  const freeHand = (side) => L(neck, 0.15 + fl, side * 0.32, -0.55 + Math.abs(fl) * 0.3);
+  const limp = p.dead || p.downT > 0;
+  const freeHand = (side) => (limp ? L(neck, 0.05, side * 0.28, -0.6) : L(neck, 0.15 + fl, side * 0.32, -0.55 + Math.abs(fl) * 0.3));
   const handR = holder === 'armR' ? hand : freeHand(1);
   // Two-handed weapons: the left hand grips further down the handle.
   const g = wpn(p).grip || 0, twoHands = holder === 'armR' && wpn(p).two && !p.parts.armL.cut && !p.dead;
   const handL = holder === 'armL' ? hand : twoHands ? [hand[0] - wdir[0] * g, hand[1] - wdir[1] * g, hand[2] - wdir[2] * g] : freeHand(-1);
-  return { wdir: holder ? wdir : null, wedge: holder ? wedge : null, hip, hipR, hipL, neck, head, shR, shL, footR, footL: footL2, kneeR: knee(hipR, footR, 'legR'), kneeL: knee(hipL, footL2, 'legL'), handR, handL, hand, tip, f, r };
+  const sk = { wdir: holder ? wdir : null, wedge: holder ? wedge : null, hip, hipR, hipL, neck, head, shR, shL, footR, footL: footL2, kneeR: knee(hipR, footR, 'legR'), kneeL: knee(hipL, footL2, 'legL'), handR, handL, hand, tip, f, r };
+  // Knocked down or dead: the whole body tips over around the feet.
+  const tb = tumble(p);
+  if (tb.angle || tb.lift) {
+    const pt = (v) => { if (!v) return v; const q = rotAxis([v[0] - base[0], v[1] - base[1], v[2] - base[2]], tb.axis, tb.angle); return [q[0] + base[0], q[1] + base[1] + tb.lift, q[2] + base[2]]; };
+    for (const key of ['hip', 'hipR', 'hipL', 'neck', 'head', 'shR', 'shL', 'footR', 'footL', 'kneeR', 'kneeL', 'handR', 'handL', 'hand', 'tip']) sk[key] = pt(sk[key]);
+    if (sk.wdir) { sk.wdir = rotAxis(sk.wdir, tb.axis, tb.angle); sk.wedge = rotAxis(sk.wedge, tb.axis, tb.angle); }
+  }
+  return sk;
+}
+
+// Falling over. Knocked down (by a kick): thrown onto your back, lie there a moment, then get up.
+// Dead: the knees give, then the body drops like dead weight in the direction it was hit, with a
+// small bounce. angle tips the body around the feet toward fallYaw; lift keeps it resting on the ground.
+export const DOWN = { fall: 0.3, lie: 1.0, rise: 0.6 };
+export function tumble(p) {
+  let a = 0, lift = 0;
+  if (p.dead) {
+    const t = p.deathT || 0, fall = clamp((t - 0.12) / 0.45, 0, 1);
+    a = 1.5 * fall * fall;
+    if (t > 0.57) a -= 0.09 * Math.exp(-(t - 0.57) * 7) * Math.abs(Math.sin((t - 0.57) * 18));
+    lift = -0.3 * ease(clamp(t / 0.25, 0, 1)) * (1 - fall) + 0.1 * fall;
+  } else if (p.downT > 0) {
+    const t = p.downT, D = DOWN;
+    const k = t < D.fall ? ease(t / D.fall) : t < D.fall + D.lie ? 1 : 1 - ease(clamp((t - D.fall - D.lie) / D.rise, 0, 1));
+    a = 1.45 * k; lift = 0.1 * k;
+  }
+  if (!a && !lift) return { angle: 0, lift: 0 };
+  const fy = p.fallYaw ?? p.yaw + Math.PI, d = forward(fy);
+  return { angle: a, lift, axis: [d[2], 0, -d[0]] };
+}
+// Rotate vector v around a unit axis by angle (Rodrigues).
+function rotAxis(v, k, ang) {
+  const c = Math.cos(ang), s = Math.sin(ang), kd = k[0] * v[0] + k[1] * v[1] + k[2] * v[2];
+  const cx = [k[1] * v[2] - k[2] * v[1], k[2] * v[0] - k[0] * v[2], k[0] * v[1] - k[1] * v[0]];
+  return [0, 1, 2].map((i) => v[i] * c + cx[i] * s + k[i] * kd * (1 - c));
 }
 
 // ---------- geometry ----------
@@ -329,14 +368,14 @@ export function resetFighter(p, side) {
     x: 0, y: 0, z: side === 0 ? 4 : -4, vx: 0, vy: 0, vz: 0, yaw: side === 0 ? 0 : Math.PI, pitch: 0, onGround: true,
     parts: newParts(), state: 'idle', st: 0, release: false, heavy: false, hitDone: false, blocking: false,
     stun: 0, flinch: 0, cd: 0, riposte: 0, stam: STAM_MAX, stamWait: 0,
-    dead: false, deathT: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, bruiseAche: 0, color: side, panic: undefined,
+    dead: false, deathT: 0, downT: 0, fallYaw: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, bruiseAche: 0, color: side, panic: undefined,
   });
   p.input.yaw = p.yaw; p.input.pitch = 0;
   p.spawnSeq = (p.spawnSeq || 0) + 1; // tells the client to snap its camera to the new spawn
 }
 
 const spend = (p, n) => { p.stam = Math.max(0, p.stam - n); p.stamWait = 0.7; };
-const canAct = (p) => !p.dead && p.stun <= 0;
+const canAct = (p) => !p.dead && p.stun <= 0 && !(p.downT > 0);
 
 // Start drawing the weapon back. The direction can still change until release.
 export function startHold(p, dir) {
@@ -347,7 +386,8 @@ export function startHold(p, dir) {
 }
 export function releaseHold(p) { if (p.state === 'hold') p.release = true; }
 export function kick(p, room) {
-  if (!canAct(p) || !(p.state === 'idle' || p.state === 'hold') || p.stam < 8 || !legsLeft(p) || !p.onGround) return false;
+  // A kick is a big commitment: it needs a good reserve of stamina and burns most of it.
+  if (!canAct(p) || !(p.state === 'idle' || p.state === 'hold') || p.stam < COST.kickMin || !legsLeft(p) || !p.onGround) return false;
   p.state = 'kick'; p.st = 0; p.hitDone = false; p.blocking = false; spend(p, COST.kick);
   room.events.push({ t: 'kickSwing', id: p.id });
   return true;
@@ -355,9 +395,11 @@ export function kick(p, room) {
 // Old one-shot attack: hold and release in one go (used by tests and simple clients).
 export function tryAttack(p, dir) { if (startHold(p, dir)) { releaseHold(p); return true; } return false; }
 
-function kill(room, p, how) {
+function kill(room, p, how, fallYaw) {
   if (p.dead) return;
-  p.dead = true; p.deathT = 0; p.state = 'idle'; p.blocking = false;
+  p.dead = true; p.deathT = 0; p.state = 'idle'; p.blocking = false; p.downT = 0;
+  // The body drops the way the killing blow pushed it; bleeding out, it slumps backwards.
+  p.fallYaw = fallYaw ?? p.yaw + Math.PI + rand(-0.6, 0.6);
   room.events.push({ t: 'death', id: p.id, how });
 }
 // Taking a hit cancels whatever you were winding up and briefly stops you attacking.
@@ -380,7 +422,7 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
   if (W.stun) def.stun = Math.max(def.stun, W.stun * (att.heavy ? 1.5 : 1));
   interrupt(def, 0.35);
   if (part.hp > 0) return;
-  if (partName === 'torso') return kill(room, def, 'gutted');
+  if (partName === 'torso') return kill(room, def, 'gutted', att.yaw + rand(-0.4, 0.4));
   const hadSword = swordArm(def) === partName;
   part.cut = true; part.hp = 0;
   // A fresh stump gushes at first, then slows to a trickle that never quite stops.
@@ -390,23 +432,19 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
     t: 'sever', id: def.id, by: att.id, part: partName, pos: at, sword: hadSword, weapon: def.weapon, color: def.color,
     vel: [fa[0] * rand(2, 4) + ra[0] * side * 3, rand(4, 6.5), fa[2] * rand(2, 4) + ra[2] * side * 3], yaw: def.yaw,
   });
-  if (partName === 'head') { def.headless = true; kill(room, def, 'decapitated'); }
+  if (partName === 'head') { def.headless = true; kill(room, def, 'decapitated', att.yaw + rand(-0.4, 0.4)); }
   else if (hadSword && swordArm(def)) room.events.push({ t: 'quip', id: def.id, kind: 'spare' });
 }
 
 function stepPlayer(room, p, dt) {
   if (p.dead) {
     p.deathT += dt;
-    // A headless body keeps running around for a bit, as one does.
-    if (p.headless && p.deathT < 2.6 && legsLeft(p)) {
-      if (p.panic === undefined || Math.random() < dt * 1.5) p.panic = p.yaw + rand(-2, 2);
-      p.yaw += (p.panic - p.yaw) * Math.min(1, dt * 4);
-      const f = forward(p.yaw); p.vx = f[0] * 4; p.vz = f[2] * 4;
-      if (p.onGround && Math.random() < dt * 1.2) { p.vy = 4.5; p.onGround = false; }
-    } else { const k = Math.pow(0.02, dt); p.vx *= k; p.vz *= k; }
+    // Dead weight: the body just slides to a stop where it fell.
+    const k = Math.pow(0.002, dt); p.vx *= k; p.vz *= k;
   } else {
     p.st += dt; p.cd = Math.max(0, p.cd - dt); p.flinch = Math.max(0, p.flinch - dt); p.riposte = Math.max(0, p.riposte - dt);
     if (p.stun > 0) p.stun = Math.max(0, p.stun - dt);
+    if (p.downT > 0) { p.downT += dt; if (p.downT >= DOWN.fall + DOWN.lie + DOWN.rise) p.downT = 0; }
     const blockPressed = p.input.b && !p.prevB;
     p.prevB = p.input.b;
     if (p.state === 'hold') {
@@ -436,7 +474,7 @@ function stepPlayer(room, p, dt) {
       }
     }
     if (p.state === 'idle' && DIRS.includes(p.input.d)) p.gdir = p.input.d;
-    p.blocking = !!p.input.b && p.state === 'idle' && p.stun <= 0;
+    p.blocking = !!p.input.b && p.state === 'idle' && p.stun <= 0 && !(p.downT > 0);
 
     if (p.stamWait > 0) p.stamWait -= dt;
     else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * dt);
@@ -446,7 +484,7 @@ function stepPlayer(room, p, dt) {
     const accel = p.onGround ? ACCEL : 2;
     p.vx += (goal.vx - p.vx) * Math.min(1, accel * dt);
     p.vz += (goal.vz - p.vz) * Math.min(1, accel * dt);
-    if (p.onGround && legs && p.input.j && p.stun <= 0 && p.stam >= COST.jump) {
+    if (p.onGround && legs && p.input.j && p.stun <= 0 && !(p.downT > 0) && p.stam >= COST.jump) {
       p.vy = legs === 2 ? 5.2 : 4; p.onGround = false; spend(p, COST.jump);
       room.events.push({ t: 'jump', id: p.id });
     } else if (p.onGround && legs === 1 && ml > 0.1 && p.state !== 'kick') {
@@ -478,11 +516,14 @@ function resolveSwing(room, att, def) {
   if (att.state === 'kick') {
     if (att.st < T.KICK_HIT[0] || att.st > T.KICK_HIT[1]) return;
     const foot = att.parts.legR.cut ? ska.footL : ska.footR;
-    if (!touching({ a: ska.hip, b: foot }, def, shapes, ['torso', 'legR', 'legL', 'armR', 'armL']).length) return;
-    // Kicks can't be blocked: they knock you back and cancel whatever you were doing.
+    if (def.downT > 0 || !touching({ a: ska.hip, b: foot }, def, shapes, ['torso', 'legR', 'legL', 'armR', 'armL']).length) return;
+    // Kicks can't be blocked: they knock you flat on your back, and you have to get up again,
+    // which leaves you open to a free hit.
     att.hitDone = true;
-    def.parts.torso.hp -= 6; def.stun = Math.max(def.stun, 0.55); def.blocking = false; interrupt(def, 0.55);
-    const fa = forward(att.yaw); def.vx += fa[0] * 4; def.vz += fa[2] * 4;
+    def.parts.torso.hp -= 6; def.blocking = false; interrupt(def, 0.3);
+    if (def.state === 'kick') def.state = 'idle';
+    def.downT = 1e-3; def.fallYaw = att.yaw;
+    const fa = forward(att.yaw); def.vx += fa[0] * 3; def.vz += fa[2] * 3;
     room.events.push({ t: 'kick', id: def.id, by: att.id, pos: skd.hip });
     return;
   }
@@ -603,7 +644,7 @@ export function snapshotPlayer(p) {
     id: p.id, name: p.name, x: r3(p.x), y: r3(p.y), z: r3(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz), yaw: r3(p.yaw), pitch: r2(p.pitch),
     onGround: p.onGround, gdir: p.gdir, state: p.state, sdir: p.sdir, st: r3(p.st), saim: Math.round(p.saim), recDur: p.recDur,
     heavy: p.heavy, blocking: p.blocking, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
-    dead: p.dead, deathT: r2(p.deathT), headless: p.headless,
+    dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
     weapon: p.weapon, walk: r2(p.walk), score: p.score, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),
   };

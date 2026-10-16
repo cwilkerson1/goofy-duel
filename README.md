@@ -57,7 +57,7 @@ mouse (press **Esc** to let go).
 | Heavy attack | Keep holding until your weapon glows white. It does 1.5× damage and staggers someone who blocks it, but you move slower while charging. |
 | Block | **Hold right click** (or Shift) and move the mouse **toward the side the blade is coming from**. |
 | Feint | Right click while drawing back cancels the attack. Or switch sides just before you release. |
-| Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked, they knock the target back and cancel what they were doing, and they're short range. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
+| Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked and they're short range. **Land it** and the target is knocked flat on their back for about two seconds: they can't block, swing or move until they've got up, so step in and look down to hit them on the ground. A kick burns most of your stamina (65 of 100) and you need at least 40 to throw one. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
 | Mute | **M** |
 | Settings menu (mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
 
@@ -154,8 +154,9 @@ What happens when a part comes off:
 
 - **One leg gone:** you hop everywhere. **Both legs:** you crawl around at knee height.
 - **Sword arm gone:** a spare sword appears in the other hand (a bit weaker). **No arms:** you kick, and with no legs either you headbutt.
-- **Head gone:** you lose the round, and your camera rides along inside your flying head. Your body may keep running for a couple of seconds.
+- **Head gone:** you lose the round, and your camera rides along inside your flying head. Your body drops on the spot.
 - **Every missing limb bleeds,** and if your health bar empties you bleed out.
+- **Dying:** the body goes limp, the knees give, and it falls like dead weight in the direction the killing blow pushed it.
 
 First to 5 round wins takes the duel. To have more than one fight going at once, give each pair
 its own arena name on the start screen, or add `?room=name` to the link.
