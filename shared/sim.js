@@ -94,6 +94,8 @@ const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (oneHanding(p) && PHASE[k]
 
 // Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
 export const BLEED = { fresh: 1.2, trickle: 0.4, ease: 0.05 };
+// Bruising from blunt hits, in health per second: it throbs at first, then eases to a dull ache.
+export const BRUISE = { perDamage: 0.03, linger: 0.3, ease: 0.05 };
 export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 15, feint: 6, jump: 6 };
 
 // Directions name the side the weapon is drawn back on, from the attacker's point of view.
@@ -327,7 +329,7 @@ export function resetFighter(p, side) {
     x: 0, y: 0, z: side === 0 ? 4 : -4, vx: 0, vy: 0, vz: 0, yaw: side === 0 ? 0 : Math.PI, pitch: 0, onGround: true,
     parts: newParts(), state: 'idle', st: 0, release: false, heavy: false, hitDone: false, blocking: false,
     stun: 0, flinch: 0, cd: 0, riposte: 0, stam: STAM_MAX, stamWait: 0,
-    dead: false, deathT: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, color: side, panic: undefined,
+    dead: false, deathT: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, bruiseAche: 0, color: side, panic: undefined,
   });
   p.input.yaw = p.yaw; p.input.pitch = 0;
   p.spawnSeq = (p.spawnSeq || 0) + 1; // tells the client to snap its camera to the new spawn
@@ -372,7 +374,7 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
   const fa = forward(att.yaw);
   const W = wpn(att);
   room.events.push({ t: 'hit', id: def.id, by: att.id, part: partName, pos: at, dmg: Math.round(amount), dir: [fa[0], fa[2]], heavy: att.heavy, weapon: att.weapon, zm: zone.m, tag: zone.tag });
-  if (BLUNT.has(att.weapon)) def.bruise = (def.bruise || 0) + amount * 0.05;
+  if (BLUNT.has(att.weapon)) { const b = amount * BRUISE.perDamage; def.bruise = (def.bruise || 0) + b; def.bruiseAche = (def.bruiseAche || 0) + b * BRUISE.linger; }
   def.vx += fa[0] * 2.2 * W.knock; def.vz += fa[2] * 2.2 * W.knock;
   if (W.knock >= 2.5) { def.vy = Math.max(def.vy, W.knock * 0.9); def.onGround = false; } // yeet
   if (W.stun) def.stun = Math.max(def.stun, W.stun * (att.heavy ? 1.5 : 1));
@@ -452,7 +454,7 @@ function stepPlayer(room, p, dt) {
       room.events.push({ t: 'hop', id: p.id });
     }
     if (p.bleed) { p.bleed = Math.max((p.wounds || 0) * BLEED.trickle, p.bleed - BLEED.ease * dt); p.parts.torso.hp -= p.bleed * dt; }
-    if (p.bruise) p.parts.torso.hp -= p.bruise * dt; // internal bruising from blunt hits
+    if (p.bruise) { p.bruise = Math.max(p.bruiseAche || 0, p.bruise - BRUISE.ease * dt); p.parts.torso.hp -= p.bruise * dt; } // internal bruising from blunt hits
     if (p.parts.torso.hp <= 0) { p.parts.torso.hp = 0; kill(room, p, p.bleed >= (p.bruise || 0) ? 'bled out' : 'bruised to death'); }
   }
   p.vy -= 14 * dt;
