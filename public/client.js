@@ -31,7 +31,7 @@ const PRESETS = {
 };
 const GFX_KEYS = Object.keys(PRESETS.Low);
 const S = (() => {
-  const d = { preset: 'Medium', ...PRESETS.Medium, auto: true, fps: false, fov: 78, sens: 1, music: 70, sfx: 80 };
+  const d = { preset: 'Medium', ...PRESETS.Medium, auto: true, fps: false, fov: 78, sens: 1, music: 70, sfx: 80, flipDir: false };
   let saved = null;
   try { saved = JSON.parse(store.get('duel.settings')); } catch {}
   if (saved && typeof saved === 'object') for (const k of Object.keys(d)) { if (typeof saved[k] === typeof d[k]) d[k] = saved[k]; }
@@ -834,6 +834,7 @@ const MENU = [
   ['Controls'],
   ['sens', 'Mouse sensitivity', 'range', [0.2, 3, 0.05, '×']],
   ['fov', 'Field of view', 'range', [60, 110, 1, '°']],
+  ['flipDir', 'Flip side swings (move the mouse the way the blade should travel)', 'check'],
   ['Sound'],
   ['music', 'Music volume', 'range', [0, 100, 1, '%']],
   ['sfx', 'Sound effects volume', 'range', [0, 100, 1, '%']],
@@ -937,11 +938,15 @@ addEventListener('mousemove', (e) => {
   const s = (atkHeld || isBlocking() ? 0.0011 : 0.0023) * S.sens;
   look.yaw -= e.movementX * s; turnPush += e.movementX * s;
   look.pitch = Math.max(-1.3, Math.min(1.3, look.pitch - e.movementY * s));
-  flick.x += e.movementX; flick.y += e.movementY;
-  const ax = Math.abs(flick.x), ay = Math.abs(flick.y);
-  if (Math.max(ax, ay) > 14) {
-    if (ax > ay) dir = flick.x < 0 ? 'left' : 'right';
-    else if (flick.y < 0) dir = 'over';
+  // Picking a side takes a quick, deliberate flick. The flick total leaks away fast (in sendInput), so
+  // slowly turning to follow your opponent never changes your side; once you're winding up it takes a
+  // bigger flick still, so steering the camera mid-swing doesn't flip the attack by accident.
+  const now = performance.now(), leak = Math.exp(-Math.min(1, (now - (flick.t || now)) / 1000) * 18); flick.t = now;
+  flick.x = flick.x * leak + e.movementX; flick.y = flick.y * leak + e.movementY;
+  const ax = Math.abs(flick.x), ay = Math.abs(flick.y), need = atkHeld ? 48 : 30;
+  if (Math.max(ax, ay) > need) {
+    if (ax > ay * 1.2) { const right = flick.x > 0; dir = right !== !!S.flipDir ? 'right' : 'left'; }
+    else if (ay > ax * 1.2 && flick.y < 0) dir = 'over';
     flick.x = flick.y = 0;
   }
 });
@@ -1002,7 +1007,6 @@ const moveFwd = () => (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.
 const moveSide = () => (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
 let lastSent = '', lastSentT = 0;
 function sendInput(dt) {
-  const k = Math.exp(-dt * 12); flick.x *= k; flick.y *= k;
   const o = {
     t: 'in', mf: moveFwd(), ms: moveSide(),
     j: keys.has('Space'), b: isBlocking(), s: isSprinting(), yaw: Math.round(look.yaw * 1000) / 1000, pitch: Math.round(look.pitch * 1000) / 1000, d: dir,
@@ -1156,6 +1160,13 @@ function drawHud(players, me, opp) {
     const cx = w / 2, cy = h / 2;
     hctx.beginPath(); hctx.arc(cx, cy, 2.5, 0, Math.PI * 2); hctx.fillStyle = '#ffffffc0'; hctx.fill();
     if (me.riposte) text('RIPOSTE! swing now', cx, cy - 70, 16, '#3fe0ff');
+    // Your chosen side, for your eyes only: a small mark left, right or above the crosshair. Your
+    // opponent still has to read it from your weapon.
+    if (!me.dead) {
+      const ang = { left: Math.PI, right: 0, over: -Math.PI / 2 }[dir], r = 22;
+      hctx.strokeStyle = me.state === 'hold' ? '#ffffffd0' : '#ffffff70'; hctx.lineWidth = 2.5; hctx.lineCap = 'round';
+      hctx.beginPath(); hctx.arc(cx, cy, r, ang - 0.32, ang + 0.32); hctx.stroke();
+    }
     // Wind-up ring: a thin ring fills while you hold an attack; the tick marks where a light attack is
     // ready, and when it closes into a solid ring the attack has become a heavy.
     if (me.state === 'hold') {
@@ -1501,4 +1512,4 @@ const audio = {
 
 // For automated testing: ?debug exposes a couple of hooks.
 let debugCam = null, debugPose = null;
-if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };

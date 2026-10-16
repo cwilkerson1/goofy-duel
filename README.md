@@ -55,7 +55,7 @@ mouse (press **Esc** to let go).
 |---|---|
 | Move / jump / look | **W A S D**, **Space**, mouse |
 | Sprint | **Hold Shift** while moving forward: 60% faster, but it drains stamina and you can't sprint while attacking or blocking. |
-| Pick a side | Move the mouse **left**, **right** or **up**. Your chosen side is **invisible**: no indicator, you just have to know. It stays until you move another way. |
+| Pick a side | **Flick** the mouse **left**, **right** or **up**. Slowly turning to follow your opponent doesn't change it, and once you're winding up it takes a bigger flick. A small mark beside your crosshair shows your side; only you can see it, so your opponent still has to read your weapon. It stays until you flick another way. If the swings feel backwards, turn on **Flip side swings** in Settings so the mouse points the way the blade travels. |
 | Light attack | **Click** (or hold just long enough to draw back) and release. Quick to throw, quick to recover. A ring round the crosshair fills while you hold; once it passes the tick mark, letting go swings a light attack. |
 | Heavy attack | **Keep holding** until the ring closes, you hear a rising ping and your weapon glows white. Your weapon draws back further, the swing is a third slower and you recover slower, but it does 1.5× damage and staggers someone who blocks it. You move slower while charging. |
 | Block | **Hold right click** and move the mouse **toward the side the blade is coming from**. |
