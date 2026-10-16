@@ -547,6 +547,7 @@ const MAT = {
   face: new THREE.MeshStandardMaterial({ color: 0xffe0bd }), eye: new THREE.MeshBasicMaterial({ color: 0x111111 }),
   gold: pbrMat(TEX.steel, { metalness: 0.95, color: 0xd9b048 }), wood: pbrMat(TEX.grain),
 };
+const FLAIL_PIVOT = 0.38, FLAIL_CHAIN = 0.45; // where the chain hangs from, and how far the ball sits from there
 // Each weapon is a group whose origin is the grip, pointing up +y along its reach.
 // userData.glowMat is the part that glows while drawing back.
 function makeWeapon(id) {
@@ -586,14 +587,17 @@ function makeWeapon(id) {
       break;
     }
     case 'flail': {
-      // Wooden handle, a short chain, and a spiked iron ball. The chain is drawn taut, as if swung.
+      // Wooden handle, then a loose chain and spiked iron ball on their own pivot; Knight.swingChain() swings them.
       glow = pbrMat(TEX.steel, { metalness: 0.85, color: 0x9a9fa6 });
       add(cyl(0.022, 0.42), MAT.wood, 0.15); add(cyl(0.026, 0.05), MAT.darkSteel, 0.36);
-      for (let k = 0; k < 6; k++) { const l = add(new THREE.TorusGeometry(0.018, 0.005, 5, 10), MAT.darkSteel, 0.41 + k * 0.06); l.rotation.y = (k % 2) * Math.PI / 2; }
-      add(new THREE.SphereGeometry(0.058, 16, 12), glow, 0.83);
+      const cg = new THREE.Group(); cg.position.y = FLAIL_PIVOT; g.add(cg); g.userData.chain = cg;
+      const hang = (geo, mat, y, x = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; cg.add(m); return m; };
+      for (let k = 0; k < 6; k++) { const l = hang(new THREE.TorusGeometry(0.018, 0.005, 5, 10), MAT.darkSteel, 0.03 + k * 0.06); l.rotation.y = (k % 2) * Math.PI / 2; }
+      const by = FLAIL_CHAIN;
+      hang(new THREE.SphereGeometry(0.058, 16, 12), glow, by);
       for (let k = 0; k < 10; k++) {
         const u = new THREE.Vector3(Math.sin(k * 2.4) * Math.sqrt(1 - ((k + 0.5) / 5 - 1) ** 2), (k + 0.5) / 5 - 1, Math.cos(k * 2.4) * Math.sqrt(1 - ((k + 0.5) / 5 - 1) ** 2)).normalize();
-        const c = add(new THREE.ConeGeometry(0.012, 0.045, 5), glow, 0.83 + u.y * 0.075, u.x * 0.075, u.z * 0.075); c.quaternion.setFromUnitVectors(UP, u);
+        const c = hang(new THREE.ConeGeometry(0.012, 0.045, 5), glow, by + u.y * 0.075, u.x * 0.075, u.z * 0.075); c.quaternion.setFromUnitVectors(UP, u);
       }
       break;
     }
@@ -734,7 +738,31 @@ class Knight {
       // Only a charged heavy glows; which side they're on has to be read from the weapon itself.
       if (isHeavy(p)) em.set(0xffffff);
       else em.copy(this.sword.userData.baseEmissive);
+      if (this.sword.userData.chain) this.swingChain();
     }
+  }
+  // The flail's ball is a weight on a rope: gravity pulls it down, and moving the handle drags and flings it.
+  swingChain() {
+    const s = this.sword, cg = s.userData.chain, now = performance.now() / 1000;
+    s.updateWorldMatrix(true, false);
+    const pivot = s.localToWorld(new THREE.Vector3(0, FLAIL_PIVOT, 0));
+    const fresh = !this.ball || this.ballFor !== s || now - this.ballT > 0.5;
+    if (fresh) {
+      this.ballFor = s; this.ballT = now;
+      this.ball = pivot.clone().add(new THREE.Vector3(0, -FLAIL_CHAIN, 0)); this.ballPrev = this.ball.clone();
+    }
+    const dt = Math.min(0.05, now - this.ballT); this.ballT = now;
+    if (dt > 0) {
+      const v = this.ball.clone().sub(this.ballPrev).multiplyScalar(Math.exp(-1.2 * dt)); // a little air drag
+      this.ballPrev.copy(this.ball);
+      this.ball.add(v).add(new THREE.Vector3(0, -9.8 * dt * dt, 0));
+      const r = this.ball.clone().sub(pivot), d = r.length();
+      if (d > FLAIL_CHAIN) this.ball.copy(pivot).add(r.multiplyScalar(FLAIL_CHAIN / d)); // the chain goes taut
+      if (this.ball.y < 0.06) this.ball.y = 0.06; // rests on the floor rather than sinking into it
+    }
+    // Point the chain group at the ball, in the handle's own frame.
+    const local = s.worldToLocal(this.ball.clone()).sub(cg.position);
+    if (local.lengthSq() > 1e-6) cg.quaternion.setFromUnitVectors(UP, local.normalize());
   }
   // The weapon glides toward where the rules say it is instead of jumping there, so changing guard,
   // raising a block, winding up and getting knocked about all flow. Swings follow almost exactly.
