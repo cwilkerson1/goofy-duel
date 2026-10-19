@@ -8,6 +8,7 @@ import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint } from './shared/sim.js';
+import { makeBot, botThink } from './bot.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -126,7 +127,10 @@ server.on('upgrade', (req, socket) => {
   if (url.pathname !== '/ws') { socket.destroy(); return; }
   const ws = wsAccept(req, socket);
   if (!ws) return;
-  const room = getRoom((url.searchParams.get('room') || 'main').slice(0, 24));
+  // Practice: a private arena of your own against the computer knight.
+  const practice = url.searchParams.has('practice');
+  const room = getRoom(practice ? `practice-${nextId++}` : (url.searchParams.get('room') || 'main').slice(0, 24));
+  if (practice) room.fighters[1] = makeBot(nextId++);
   const name = (url.searchParams.get('name') || 'Anonymous Knight').slice(0, 20);
   const me = newPlayer(nextId++, name);
   ws.me = me;
@@ -184,6 +188,7 @@ setInterval(() => {
 function tick() {
   frame++;
   for (const room of rooms.values()) {
+    for (const f of room.fighters) if (f && f.bot) botThink(f, room, TICK);
     stepRoom(room, TICK);
     if (frame % SEND_EVERY) continue;
     const msg = JSON.stringify({

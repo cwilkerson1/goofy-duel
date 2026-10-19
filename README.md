@@ -51,6 +51,11 @@ The combat works like Last Oasis: you pick a side with the mouse, draw back, and
 the defender has to read which side you're on and block it. Click into the game to grab the
 mouse (press **Esc** to let go).
 
+**No one to fight?** Press **🤖 Practice against the computer** on the start screen. You get a
+private arena against a computer knight that keeps to its weapon's range, attacks from all three
+sides (sometimes heavy, sometimes a feint), blocks about 60% of attacks it sees coming, and kicks
+anyone who turtles. Its settings are at the top of `bot.js`.
+
 | Do this | How |
 |---|---|
 | Move / jump / look | **W A S D**, **Space**, mouse |

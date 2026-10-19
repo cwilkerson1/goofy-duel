@@ -44,14 +44,16 @@ const saveSettings = () => store.set('duel.settings', JSON.stringify(S));
 $('name').value = store.get('duel.name') || pick(GOOFY);
 $('room').value = params.get('room') || store.get('duel.room') || 'main';
 let joined = false;
-$('go').onclick = () => {
+const enter = (practice) => {
   const name = $('name').value.trim() || 'Nameless Knight', room = $('room').value.trim() || 'main';
   store.set('duel.name', name); store.set('duel.room', room);
   $('lobby').remove(); joined = true;
   audio.init();
-  connect(name, room);
+  connect(name, room, practice);
   lockPointer();
 };
+$('go').onclick = () => enter(false);
+$('practice').onclick = () => enter(true); // fight the computer knight in an arena of your own
 $('name').addEventListener('keydown', (e) => e.key === 'Enter' && $('go').click());
 
 // ---------- renderer & scene ----------
@@ -937,12 +939,12 @@ const menu = (() => {
 let ws = null, myId = null, connected = false, leaving = false, pingTimer = 0;
 const pings = [], netStats = { show: false, late: 0, frames: 0, worst: 0, fps: 0, worstShown: 0, since: 0 };
 let prev = null, cur = null, prevT = 0, curT = 0, mySpawn = -1;
-function connect(name, room) {
+function connect(name, room, practice = false) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`);
+  ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}${practice ? '&practice=1' : ''}`);
   ws.onopen = () => { connected = true; send({ t: 'ping', c: performance.now() }); };
   clearInterval(pingTimer); pingTimer = setInterval(() => send({ t: 'ping', c: performance.now() }), 2000); // keep the ping fresh
-  ws.onclose = () => { connected = false; if (!leaving) setTimeout(() => connect(name, room), 1500); };
+  ws.onclose = () => { connected = false; if (!leaving) setTimeout(() => connect(name, room, practice), 1500); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'welcome') { myId = m.id; return; }
