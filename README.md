@@ -9,7 +9,7 @@ The arena is set on a full-moon night: jack-o'-lanterns on the pillars, tombston
 dead trees, ghosts drifting over the stands, bats overhead, and a wolf howl at the start of each round.
 
 - **Server:** one Node.js file, no `npm install` needed. It runs the fight itself (so nobody can cheat) and serves the game page. The 3D engine (Three.js) is bundled in `public/vendor/`, so it works without internet.
-- **Strictly 1v1, players only:** there are no bots. Open the page in any browser on your home network; the first two people in an arena fight each other. Anyone after that watches with a camera circling the fight, and the first watcher steps in if a fighter leaves.
+- **Strictly 1v1:** open the page in any browser on your home network; the first two people with the same arena code fight each other (or practice alone against the computer). Anyone after that watches with a camera circling the fight, and the first watcher steps in if a fighter leaves.
 
 ## Run it on the Mac mini
 
@@ -66,6 +66,8 @@ anyone who turtles. Its settings are at the top of `bot.js`.
 | Block | **Hold right click** and move the mouse **toward the side the blade is coming from**. |
 | Feint | **Q** (or right click) cancels your attack: any time while drawing back, and even early in the swing itself, up to about halfway, as long as it hasn't hit yet. Cancelling a swing already in motion costs more stamina. Or switch sides just before you release. |
 | Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked and they're short range. **Land it** and the target is knocked flat on their back for about two seconds: they can't block, swing or move until they've got up, so step in and look down to hit them on the ground. A kick burns most of your stamina (65 of 100) and you need at least 40 to throw one. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
+| Rematch, once the match is over | **R** (both fighters press it, and a fresh best of 5 starts at 0–0) |
+| Copy an invite link while waiting for an opponent | **C** |
 | Mute | **M** |
 | Settings menu (mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
 | Connection and frame-rate stats, for tracking down stutter | **F3** |
@@ -170,8 +172,13 @@ What happens when a part comes off:
 - **Every missing limb bleeds,** and if your health bar empties you bleed out.
 - **Dying:** the body goes limp, the knees give, and it falls like dead weight in the direction the killing blow pushed it.
 
-Every duel is **best of 5**: the first to win 3 rounds wins, the match ends there, and after a few seconds on the result everyone goes back to the start screen to set up the next one. To have more than one fight going at once, give each pair
-its own arena name on the start screen, or add `?room=name` to the link.
+Every duel is **best of 5**: the first to win 3 rounds wins and the match ends there. Both fighters press **R**
+to run it back at 0–0 (the screen shows when your opponent is waiting on you), or press **Esc** and leave.
+
+**Arena codes:** the start screen gives you a short code like `WOLF-42`. Anyone who types the same code (or
+opens the invite link from **🔗 Copy invite link**, which is `/?room=WOLF-42`) lands in your arena. **🎲 New code**
+picks another, so several pairs can fight at once without bumping into each other. While you wait in the
+arena, the code is on screen and **C** copies the link.
 
 ## Sound effects
 

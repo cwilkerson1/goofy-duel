@@ -705,7 +705,7 @@ export function stepRoom(room, dt) {
   // Round flow.
   room.timer -= dt;
   if (room.phase === 'waiting' && fighters.length === 2) startRound(room, true);
-  else if (room.phase !== 'waiting' && fighters.length < 2) { room.phase = 'waiting'; room.msg = 'Waiting for a challenger… (send them this link)'; }
+  else if (room.phase !== 'waiting' && fighters.length < 2) { room.phase = 'waiting'; room.msg = 'Waiting for a challenger…'; }
   else if (room.phase === 'fight') {
     const alive = fighters.filter((p) => !p.dead);
     if (alive.length < 2) {
@@ -714,7 +714,7 @@ export function stepRoom(room, dt) {
         alive[0].score++;
         room.msg = `${alive[0].name} wins the round!`;
         if (alive[0].score >= WIN_SCORE) {
-          // That's the match. It stays over (no rematch); everyone goes back to the start screen.
+          // That's the match. Both fighters can vote for a rematch (voteRematch), or leave.
           const [a, b] = fighters.map((p) => p.score).sort((x, y) => y - x);
           room.phase = 'over'; room.msg = `${alive[0].name} WINS THE DUEL ${a}–${b}!`;
           room.events.push({ t: 'matchEnd', winner: alive[0].id });
@@ -728,8 +728,17 @@ export function stepRoom(room, dt) {
   else if (room.phase === 'countdown' && room.timer <= 0) { room.phase = 'fight'; room.msg = 'FIGHT!'; }
 }
 
+// After a match, a fighter asks for a rematch. When both have, a fresh best-of-5 starts at 0–0.
+export function voteRematch(room, p) {
+  if (room.phase !== 'over' || !room.fighters.includes(p)) return false;
+  p.rematch = true;
+  if (room.fighters.every((f) => f && f.rematch)) startRound(room, true);
+  else room.events.push({ t: 'rematchAsk', id: p.id });
+  return true;
+}
+
 function startRound(room, resetScores) {
-  room.fighters.forEach((p, i) => { if (p) { resetFighter(p, i); if (resetScores) p.score = 0; } });
+  room.fighters.forEach((p, i) => { if (p) { resetFighter(p, i); p.rematch = false; if (resetScores) p.score = 0; } });
   // Spin the wheel of fortune for everyone's weapon this round.
   const result = {};
   room.fighters.forEach((p) => { if (p) { p.weapon = WEAPONS[room.forceWeapon] ? room.forceWeapon : rollWeapon(); result[p.id] = p.weapon; } });
@@ -739,7 +748,7 @@ function startRound(room, resetScores) {
 }
 
 export function newRoom(name) {
-  return { name, fighters: [null, null], phase: 'waiting', timer: 0, msg: 'Waiting for a challenger… (send them this link)', events: [] };
+  return { name, fighters: [null, null], phase: 'waiting', timer: 0, msg: 'Waiting for a challenger…', events: [] };
 }
 
 const r2 = (v) => Math.round(v * 100) / 100, r3 = (v) => Math.round(v * 1000) / 1000;
@@ -749,7 +758,7 @@ export function snapshotPlayer(p) {
     onGround: p.onGround, gdir: p.gdir, state: p.state, sdir: p.sdir, st: r3(p.st), saim: Math.round(p.saim), recDur: p.recDur,
     heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
-    weapon: p.weapon, walk: r2(p.walk), score: p.score, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
+    weapon: p.weapon, walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),
   };
 }

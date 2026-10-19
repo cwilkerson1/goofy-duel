@@ -58,8 +58,9 @@
     <h1>🎃 Arena Roulette</h1>
     <label for="name">Your knightly name</label>
     <input id="name" maxlength="20" autocomplete="off">
-    <label for="room">Arena (share this with your opponent)</label>
-    <input id="room" maxlength="24" value="main" autocomplete="off">
+    <label for="room">Arena code (your opponent uses the same one)</label>
+    <input id="room" maxlength="24" autocomplete="off">
+    <div class="pair"><button id="newCode" class="ghost">🎲 New code</button><button id="copyLink" class="ghost">🔗 Copy invite link</button></div>
     <button id="go">Enter the arena</button>
     <button id="practice" class="ghost">🤖 Practice against the computer</button>
     <div class="pair"><button id="howBtn" class="ghost">📖 How to play</button><button id="gear" class="ghost">⚙ Settings</button></div>

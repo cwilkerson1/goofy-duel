@@ -1,7 +1,7 @@
 // The practice knight: a computer opponent for fighting alone. It plays by the same rules as a person,
 // only through the same inputs (move, look, block, wind up, release, feint, kick), with a human-ish
 // reaction time and the odd mistake, so it can be beaten by reading it.
-import { ARM, DIRS, MIRROR, newPlayer, startHold, releaseHold, feint, kick, tm, wpn } from './shared/sim.js';
+import { ARM, DIRS, MIRROR, newPlayer, startHold, releaseHold, feint, kick, tm, wpn, voteRematch } from './shared/sim.js';
 
 const BOT_NAMES = ['Sir Practice', 'The Training Knight', 'Sir Strawman', 'Dummy the Bold'];
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -21,6 +21,9 @@ export function makeBot(id) {
 export function botThink(me, room, dt) {
   const B = me.bot, i = me.input, op = room.fighters.find((f) => f && f !== me);
   i.mf = 0; i.ms = 0; i.b = 0; i.j = 0; i.s = 0;
+  // Always up for another go: agree to a rematch a moment after the match ends.
+  if (room.phase === 'over') { B.overT = (B.overT || 0) + dt; if (B.overT > 1.5 && !me.rematch) voteRematch(room, me); return; }
+  B.overT = 0;
   if (!op || me.dead || room.phase !== 'fight') { B.cool = 1.5; return; }
   const dx = op.x - me.x, dz = op.z - me.z, dist = Math.hypot(dx, dz);
   // Face the opponent, with a little wobble so it doesn't look robotic.

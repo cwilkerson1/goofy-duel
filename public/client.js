@@ -42,10 +42,24 @@ const S = (() => {
 })();
 const saveSettings = () => store.set('duel.settings', JSON.stringify(S));
 $('name').value = store.get('duel.name') || pick(GOOFY);
-$('room').value = params.get('room') || store.get('duel.room') || 'main';
 let joined = false;
+// Arena codes: a short, easy-to-say name like WOLF-42. Anyone with the same code lands in the same arena.
+const CODE_WORDS = ['WOLF', 'BEAR', 'CROW', 'BOAR', 'HAWK', 'LION', 'STAG', 'FOX', 'BAT', 'OWL', 'RAVEN', 'VIPER', 'GOAT', 'OX', 'MOTH', 'NEWT'];
+const newCode = () => `${pick(CODE_WORDS)}-${10 + ((Math.random() * 90) | 0)}`;
+const inviteLink = (room) => `${location.origin}/?room=${encodeURIComponent(room)}`;
+// The clipboard API only works on https or localhost; on a plain LAN address fall back to the old way.
+function copyInvite(room) {
+  const link = inviteLink(room);
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(link).catch(() => legacyCopy(link));
+  return Promise.resolve(legacyCopy(link));
+}
+function legacyCopy(t) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch {} a.remove(); }
+$('room').value = params.get('room') || store.get('duel.room') || newCode();
+$('newCode').onclick = () => { $('room').value = newCode(); };
+$('copyLink').onclick = () => copyInvite($('room').value.trim() || 'main').then(() => { $('copyLink').textContent = '✓ Link copied'; setTimeout(() => { $('copyLink').textContent = '🔗 Copy invite link'; }, 2000); });
 const enter = (practice) => {
   const name = $('name').value.trim() || 'Nameless Knight', room = $('room').value.trim() || 'main';
+  arenaName = room;
   store.set('duel.name', name); store.set('duel.room', room);
   $('lobby').remove(); joined = true;
   audio.init();
@@ -983,6 +997,8 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || menu.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;
+  if (e.code === 'KeyR' && !e.repeat && cur && cur.phase === 'over') send({ t: 'rematch' });
+  if (e.code === 'KeyC' && !e.repeat && cur && cur.phase === 'waiting') copyInvite(arenaName).then(() => { copiedAt = performance.now(); });
   if (e.code === 'F3' && !e.repeat) { netStats.show = !netStats.show; e.preventDefault(); }
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
   if (e.code === 'KeyQ' && !e.repeat) feintNow();
@@ -1294,7 +1310,16 @@ function drawHud(players, me, opp) {
   if (cur.phase === 'spin' || wheel.visible()) wheel.draw(w, h, players);
   else if (cur.phase === 'over') {
     text(cur.msg, w / 2, h * 0.32, 46, '#ffd23f');
-    text(`Back to the start screen in ${Math.max(0, Math.ceil((matchOverAt + MATCH_OVER_WAIT - performance.now()) / 1000))}…`, w / 2, h * 0.32 + 44, 20, '#fff');
+    // Rematch: both fighters press R. Show who's waiting on whom.
+    const meP = cur.players.find((p) => p && p.id === myId), oppP = cur.players.find((p) => p && p.id !== myId);
+    const line = !meP ? 'The fighters can call a rematch' : meP.rematch ? `Waiting for ${oppP ? oppP.name : 'your opponent'} to accept…`
+      : oppP && oppP.rematch ? `${oppP.name} wants a rematch! Press R to accept` : 'Press R for a rematch';
+    text(line, w / 2, h * 0.32 + 44, 22, oppP && oppP.rematch && meP && !meP.rematch ? '#7dff9a' : '#fff');
+    text('Esc opens the menu if you want to leave', w / 2, h * 0.32 + 72, 16, '#c9bfe0');
+  } else if (cur.phase === 'waiting') {
+    text(cur.msg, w / 2, h * 0.32, 34, '#fff');
+    text(`Arena code: ${arenaName}`, w / 2, h * 0.32 + 40, 24, '#ffd23f');
+    text(copiedAt && performance.now() - copiedAt < 2500 ? 'Invite link copied! Send it to a friend.' : 'Press C to copy an invite link', w / 2, h * 0.32 + 70, 18, '#fff');
   } else if (cur.phase !== 'fight') text(cur.msg, w / 2, h * 0.32, cur.phase === 'roundEnd' ? 46 : 34, cur.phase === 'roundEnd' ? '#ffd23f' : '#fff');
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   if (joined && !locked() && !menu.isOpen()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
@@ -1404,7 +1429,7 @@ function footsteps(p, isMe) {
 let lastView = null; // ?debug only: the players as last drawn
 let last = performance.now(), clock = 0, lastPhase = '', wasHeavy = false;
 // When the duel is won, everyone sees the result for a few seconds and then goes back to the start screen.
-const MATCH_OVER_WAIT = 8000; let matchOverAt = 0;
+let arenaName = '', copiedAt = 0;
 function frame(now) {
   const ft = now - last, dt = Math.max(0, Math.min(0.05, ft / 1000)); last = now; clock += dt;
   netStats.frames++; netStats.worst = Math.max(netStats.worst, ft);
@@ -1421,7 +1446,6 @@ function frame(now) {
   if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(cur.song); }
-    else if (cur.phase === 'over') { matchOverAt = performance.now(); setTimeout(() => { if (cur && cur.phase === 'over') $('menuLeave').onclick(); }, MATCH_OVER_WAIT); }
     else music.stop();
     lastPhase = cur.phase;
   }

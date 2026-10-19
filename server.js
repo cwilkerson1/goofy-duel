@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint } from './shared/sim.js';
+import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch } from './shared/sim.js';
 import { makeBot, botThink } from './bot.js';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -169,6 +169,7 @@ server.on('upgrade', (req, socket) => {
     else if (m.t === 'release') releaseHold(me);
     else if (m.t === 'kick') kick(me, room);
     else if (m.t === 'feint') feint(me, room);
+    else if (m.t === 'rematch') voteRematch(room, me);
     else if (m.t === 'atk') tryAttack(me, m.d);
   };
   ws.onclose = () => {
