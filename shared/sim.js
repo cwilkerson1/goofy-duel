@@ -121,9 +121,12 @@ export const MIRROR = { left: 'right', right: 'left', over: 'over' };
 // a = yaw of the blade in degrees (+ is to the swinger's right), p = pitch (+ is up).
 // Side slashes follow where you look, so looking down cuts at the legs.
 export const SWING = {
-  left:  { wa: -125, wp: 25,  a: [-100, 80], p: [12, -2],   dmg: [24, 32] },
-  right: { wa: 125,  wp: 25,  a: [100, -80], p: [12, -2],   dmg: [24, 32] },
-  over:  { wa: -9,   wp: 150, a: [-9, -9],   p: [125, -45], dmg: [28, 36] },
+  // wa, wp: where the swing's arc starts. show: where the weapon is held while drawn back, out where the
+  // opponent can read it (a side swing high and wide on that side, an overhead straight up above the head),
+  // instead of tucked behind the back. The swing blends from there into its arc in its first moments.
+  left:  { wa: -125, wp: 25,  show: [-110, 34], a: [-100, 80], p: [12, -2],   dmg: [24, 32] },
+  right: { wa: 125,  wp: 25,  show: [100, 48],  a: [100, -80], p: [12, -2],   dmg: [24, 32] },
+  over:  { wa: -9,   wp: 150, show: [14, 108],  a: [-9, -9],   p: [125, -45], dmg: [28, 36] },
 };
 
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -163,6 +166,8 @@ const chopTilt = (p, deg) => (p.sdir === 'over' ? clamp(deg + 25, -35, 0) : 0);
 
 // Where the weapon is drawn back to: a light attack's wind-up, or (hk = 1) a heavy's bigger one.
 const windUp = (s, hk) => [s.wa * (1 + 0.15 * hk), s.wp + (s.wp > 90 ? 18 : 15) * hk];
+const showUp = (s, hk) => [s.show[0] * (1 + 0.1 * hk), s.show[1] + (s.show[1] > 90 ? 12 : 10) * hk];
+const SHOW_BLEND = 0.3; // fraction of the swing spent moving from the held pose onto the arc
 // Local (forward, right, up) direction from blade yaw/pitch in degrees.
 const bladeDir = (a, p) => [Math.cos(p * D2R) * Math.cos(a * D2R), Math.cos(p * D2R) * Math.sin(a * D2R), Math.sin(p * D2R)];
 const norm = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
@@ -188,15 +193,18 @@ export function swordLocal(p) {
     const k = ease(clamp(p.st / tm(p, 'DRAW'), 0, 1));
     // Charging a heavy: the weapon keeps going further back until it's ready.
     const hk = ease(clamp((p.st - tm(p, 'DRAW')) / (tm(p, 'HEAVY_AT') - tm(p, 'DRAW')), 0, 1));
-    const [wa, wp] = windUp(s, hk);
+    const [wa, wp] = showUp(s, hk);
     return mix(guardPose(p), swingPose(wa, wp + slashTilt(p, p.pitch / D2R)), k);
   }
   const tilt = slashTilt(p, p.saim);
   if (p.state === 'active') {
     // The blade leaves from exactly where it was drawn back to, picks up speed, and slows into the
     // follow-through, so there's no jump at release and no robotic constant-speed sweep.
-    const u = clamp(p.st / tm(p, 'ACTIVE'), 0, 1), k = u * u * (3 - 2 * u), [wa, wp] = windUp(s, p.heavy ? 1 : 0);
-    return swingPose(lerp(wa, s.a[1], k), lerp(wp, s.p[1] + chopTilt(p, p.saim), k) + tilt);
+    const u = clamp(p.st / tm(p, 'ACTIVE'), 0, 1), k = u * u * (3 - 2 * u), hk = p.heavy ? 1 : 0, [wa, wp] = windUp(s, hk);
+    const arc = swingPose(lerp(wa, s.a[1], k), lerp(wp, s.p[1] + chopTilt(p, p.saim), k) + tilt);
+    if (u >= SHOW_BLEND) return arc;
+    const [ha, hp] = showUp(s, hk);
+    return mix(swingPose(ha, hp + tilt), arc, ease(u / SHOW_BLEND));
   }
   if (p.state === 'recover') {
     const k = ease(clamp(p.st / p.recDur, 0, 1));

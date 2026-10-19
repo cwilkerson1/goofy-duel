@@ -676,6 +676,7 @@ const surcoatTex = (color, skirt) => canvasTexture(256, 256, (g, w, h) => {
 });
 const _qYaw = new THREE.Quaternion();
 const _qTumble = new THREE.Quaternion(), _vAxis = new THREE.Vector3();
+const TRAIL_N = 24, TRAIL_LIFE = 0.22;
 class Knight {
   constructor(color) {
     this.color = color;
@@ -701,6 +702,34 @@ class Knight {
     this.knees = [m(GEO.knee, MAT.iron), m(GEO.knee, MAT.iron)];
     this.weaponId = 'longsword'; this.sword = makeWeapon(this.weaponId); this.root.add(this.sword);
     this.offFist = makeFist(MAT.darkSteel); this.offFist.visible = false; this.root.add(this.offFist); // the non-punching hand, when boxing
+    // A faint streak behind the weapon's head as it's drawn back and swung, so you can see which way it's moving.
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 2 * 3), 3));
+    tg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL_N * 2 * 3), 3));
+    const idx = []; for (let i = 0; i < TRAIL_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } tg.setIndex(idx);
+    this.trail = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    this.trail.frustumCulled = false; this.trail.visible = false; this.root.add(this.trail); this.trailPts = [];
+  }
+  // Keep the last moments of the weapon head's path while it's being drawn back or swung, fading with age.
+  updateTrail(p, sk, show) {
+    const now = performance.now() / 1000, pts = this.trailPts;
+    const moving = show && sk.tip && !p.dead && ((p.state === 'hold' && p.st < tm(p, 'DRAW') + 0.1) || p.state === 'active');
+    if (moving) {
+      const len = WEAPONS[p.weapon].len, k = Math.max(0, 1 - Math.min(0.35, 0.28 / len));
+      const base = sk.hand.map((v, i) => v + (sk.tip[i] - v) * k);
+      const last = pts[pts.length - 1];
+      if (!last || Math.hypot(...sk.tip.map((v, i) => v - last.tip[i])) > 0.004) pts.push({ tip: sk.tip.slice(), base, t: now });
+    }
+    while (pts.length && (now - pts[0].t > TRAIL_LIFE || pts.length > TRAIL_N)) pts.shift();
+    this.trail.visible = pts.length > 1;
+    if (!this.trail.visible) return;
+    const pos = this.trail.geometry.attributes.position, col = this.trail.geometry.attributes.color, n = pts.length;
+    for (let i = 0; i < TRAIL_N; i++) {
+      const q = pts[Math.min(i, n - 1)], f = i < n ? Math.max(0, 1 - (now - q.t) / TRAIL_LIFE) * (i / (n - 1)) : 0, c = 0.55 * f * f;
+      pos.setXYZ(i * 2, ...q.tip); pos.setXYZ(i * 2 + 1, ...q.base);
+      col.setXYZ(i * 2, c, c, c * 0.95); col.setXYZ(i * 2 + 1, 0, 0, 0);
+    }
+    pos.needsUpdate = col.needsUpdate = true;
   }
   update(p, sk, firstPerson) {
     const cut = (k) => p.parts[k].cut;
@@ -779,6 +808,7 @@ class Knight {
       else em.copy(this.sword.userData.baseEmissive);
       if (this.sword.userData.chain) this.swingChain();
     }
+    this.updateTrail(p, sk, !firstPerson && !wheel.hiding());
   }
   // The flail's ball is a weight on a rope: gravity pulls it down, and moving the handle drags and flings it.
   swingChain() {
