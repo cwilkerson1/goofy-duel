@@ -108,7 +108,6 @@ opponent's are revealed when it stops, and the fight begins.
 | ⚒️ Flanged Mace | One-handed and blunt. Built to beat armour: hits hard, dazes and shoves |
 | ⛓️ Flail | Blunt, with a spiked ball on a chain. Hits hard and knocks people back, but it's poor for blocking |
 | ⛏️ War Pick | A long spike that punches through armour; small sweet spot, big damage |
-| 👊 Bare Fists | No weapon this round: you box. Click straight for a straight right, steer left or right for a hook with that hand. Fast, short reach, and punches can't take limbs off (a knockout to the head still wins). Comes with a sad trombone |
 | ✨ Excalibur | Rare jackpot. Fast, brutal, golden. Comes with a fanfare |
 
 **Hitboxes and sweet spots.** Each weapon only hits with the part of it you can see, so reach comes
@@ -127,7 +126,7 @@ blood and lands with a heavy thud, while a handle or shaft hit barely bleeds.
 | Flail | The spiked ball | The handle, and the chain is weak |
 | War Pick | The spike | The handle |
 
-**Blunt weapons** (hammer, mace, flail, fists) can still knock limbs and heads off,
+**Blunt weapons** (hammer, mace, flail) can still knock limbs and heads off,
 but every hit also **bruises**: the body part darkens and you keep losing health over time, so
 they can win by bruising someone to death.
 
@@ -143,7 +142,7 @@ stamina cost and footwork, and the wheel tells you what you got (for example "qu
 
 | Weapon | Feel |
 |---|---|
-| Dagger, Fists | Very fast to wind up, swing and recover, cheap on stamina, nimble feet, but tiny reach |
+| Dagger | Very fast to wind up, swing and recover, cheap on stamina, nimble feet, but tiny reach |
 | Arming Sword | Quick and light |
 | Flail | The ball takes a moment to come round, so its swing is a touch slow |
 | Longsword | The baseline |

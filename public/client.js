@@ -1313,7 +1313,7 @@ const wheel = (() => {
   return {
     start(ev) {
       const mine = ev.result[myId] || Object.values(ev.result)[0];
-      const sl = slices.find((s) => s.k === mine);
+      const sl = slices.find((s) => s.k === mine) || slices[0]; // a forced off-wheel weapon (fists) just spins
       const inside = sl.a0 + (sl.a1 - sl.a0) * (0.2 + Math.random() * 0.6);
       // Rotate so `inside` ends under the pointer, after several full turns.
       const target = POINTER - inside, turns = 6 + Math.floor(Math.random() * 3);

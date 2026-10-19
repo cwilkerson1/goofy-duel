@@ -60,7 +60,8 @@ export const WEAPONS = {
   fists:      { name: 'Bare Fists',        emoji: '👊', small: true, len: 0.15, dmg: 0.8,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'No weapon this round. Good luck.' },
   excalibur:  { name: 'Excalibur',         emoji: '✨', len: 1.1,  dmg: 1.4,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'Jackpot! The legendary blade.' },
 };
-export const WHEEL = Object.keys(WEAPONS); // slice order around the wheel
+// Slice order around the wheel. Bare fists are off the wheel (WEAPON=fists npm start still forces them).
+export const WHEEL = Object.keys(WEAPONS).filter((k) => k !== 'fists');
 
 // Hitboxes, matched to each weapon's 3D model. Each zone is a capsule in the weapon's own frame:
 // y runs from the grip along the weapon, x points along its edge (the side facing the target).
