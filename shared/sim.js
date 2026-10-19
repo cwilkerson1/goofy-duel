@@ -19,6 +19,9 @@ export const PART_MAX = { head: 45, torso: 100, armR: 25, armL: 25, legR: 30, le
 export const DIRS = ['left', 'over', 'right'];
 export const WIN_SCORE = 3; // best of 5: the first to win 3 rounds wins the duel, and the match ends
 export const STAM_MAX = 100;
+// All weapon damage is scaled by this, so fights take several good hits. And no one blow can take
+// more than HEAD_CAP of the head's health, so it always takes at least two hits to the head.
+export const DMG_SCALE = 0.55, HEAD_CAP = 0.6;
 
 export const T = {
   DRAW: 0.28,        // minimum time the weapon is drawn back before a release swings
@@ -36,7 +39,7 @@ export const T = {
 // len: blade reach in metres. dmg: overall damage. sever: extra damage to limbs and heads.
 // Swing feel (lower is faster): draw = wind-up, swing = how long the blade takes to cross,
 // rec = recovery after a swing or bounce. stam: stamina per swing/feint. move: footwork speed.
-// small: a small weapon that skips the overall PACE slowdown.
+// small: a small weapon, slowed by SMALL_PACE instead of PACE.
 // two: a two-handed weapon (the big ones): both hands on the grip, slower, hits harder. grip: how far
 // down the handle the second hand sits. Swung with one arm left, it's slower still and hits softer.
 // knock: shove on hit (big = launch).
@@ -54,7 +57,7 @@ export const WEAPONS = {
   mace:       { name: 'Flanged Mace',      emoji: '⚒️', len: 0.75, dmg: 1.2, sever: 0.6, draw: 1, swing: 1, rec: 1, stam: 1.05, move: 1, knock: 1.8, stun: 0.35, block: 1.1, weight: 1,   color: '#8a8f96', line: 'Dents helmets, rattles skulls.' },
   flail:      { name: 'Flail',             emoji: '⛓️', len: 0.86, dmg: 1.15, sever: 0.7, draw: 1.1, swing: 1.25, rec: 1.1, stam: 1.15, move: 1, knock: 2.4, stun: 0.3,  block: 1.3, weight: 1,   color: '#6f6a64', line: 'Hard to block with, harder to be hit by.' },
   pick:       { name: 'War Pick',          emoji: '⛏️', len: 0.8,  dmg: 1.25,  sever: 0.6, draw: 1.15, swing: 0.95, rec: 1.15, stam: 1.1, move: 0.95, knock: 1.2, stun: 0.25, block: 1, weight: 1,   color: '#5f6670', line: 'Punches straight through plate.' },
-  fists:      { name: 'Bare Fists',        emoji: '👊', small: true, len: 0.15, dmg: 0.5,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'No weapon this round. Good luck.' },
+  fists:      { name: 'Bare Fists',        emoji: '👊', small: true, len: 0.15, dmg: 0.8,  sever: 0.5, draw: 0.45, swing: 0.6, rec: 0.5, stam: 0.5, move: 1.2, knock: 1.6, stun: 0.15, block: 1.5, weight: 0.8, color: '#e8cba8', line: 'No weapon this round. Good luck.' },
   excalibur:  { name: 'Excalibur',         emoji: '✨', len: 1.1,  dmg: 1.4,  sever: 2,   draw: 0.8, swing: 0.8, rec: 0.85, stam: 0.8, move: 1.05, knock: 1.5, stun: 0,    block: 0.6, weight: 0.35, color: '#ffd700', line: 'Jackpot! The legendary blade.' },
 };
 export const WHEEL = Object.keys(WEAPONS); // slice order around the wheel
@@ -99,9 +102,10 @@ export const armsLeft = (p) => (p.parts.armR.cut ? 0 : 1) + (p.parts.armL.cut ? 
 export const oneHanding = (p) => !!wpn(p).two && armsLeft(p) < 2;
 // Heavy attacks swing a third slower and take a bit longer to recover from.
 const HEAVY_TIME = { ACTIVE: 1.35, RECOVER: 1.2, CHAMBER: 1.35 };
-// Everything but the small weapons swings this much slower overall. The heavy-attack charge keeps its own timing.
-export const PACE = 1.3;
-export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' && PHASE[k] && !wpn(p).small ? PACE : 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) // weapon-scaled timing
+// Overall swing pace: every weapon's wind-up, swing and recovery is this much slower than its table
+// value, and the small ones (dagger, fists) a bit less so. The heavy-attack charge keeps its own timing.
+export const PACE = 1.5, SMALL_PACE = 1.2;
+export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' && PHASE[k] ? (wpn(p).small ? SMALL_PACE : PACE) : 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) // weapon-scaled timing
   * (p.heavy && p.state !== 'hold' ? HEAVY_TIME[k] ?? 1 : 1);
 
 // Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
@@ -132,10 +136,10 @@ export const legsLeft = (p) => (p.parts.legR.cut ? 0 : 1) + (p.parts.legL.cut ? 
 export const swordArm = (p) => (!p.parts.armR.cut ? 'armR' : !p.parts.armL.cut ? 'armL' : null);
 export const forward = (yaw) => [-Math.sin(yaw), 0, -Math.cos(yaw)];
 export const rightOf = (yaw) => [Math.cos(yaw), 0, -Math.sin(yaw)];
-// Footwork. A knight in armour walks at a brisk 2.8 m/s, backs off slower and sidesteps a bit slower,
+// Footwork. A knight in armour walks at a steady 2.4 m/s, backs off slower and sidesteps a bit slower,
 // and takes a moment to get going or stop. Used by the server and by your browser's prediction.
 // Sprinting (Shift) is 60% faster, forward only, with both legs, and only with a weapon at rest.
-export const WALK_SPEED = 2.8, ACCEL = 8, STRIDE = 3, SPRINT = 1.6;
+export const WALK_SPEED = 2.4, ACCEL = 8, STRIDE = 3, SPRINT = 1.6;
 export function moveGoal(p, mf, ms, yaw, blocking, sprint) {
   const legs = legsLeft(p);
   let speed = (legs === 2 ? WALK_SPEED : legs === 1 ? 2 : 0.9) * wpn(p).move;
@@ -444,8 +448,8 @@ const canAct = (p) => !p.dead && p.stun <= 0 && !(p.downT > 0);
 
 // Start drawing the weapon back. The direction can still change until release.
 // An attack pressed while you're still finishing the last one (or a moment too early) isn't thrown
-// away: it's remembered for half a second and starts the instant you're free, so swings chain.
-const QUEUE_FOR = 0.5;
+// away: it's remembered for a moment and starts the instant you're free, so swings chain.
+const QUEUE_FOR = 0.8;
 // Combo: the second half of a normal recovery (not a parried bounce) can go straight into the next wind-up.
 const canStart = (p) => canAct(p) && !(p.flinch > 0) && p.stam >= 5
   && ((p.state === 'idle' && !(p.cd > 0)) || (p.state === 'recover' && p.comboOk && p.st >= p.recDur * T.COMBO_AT));
@@ -671,7 +675,8 @@ function resolveSwing(room, att, def) {
   const n = [def.x - att.x, def.z - att.z], nl = Math.hypot(...n) || 1;
   const closing = ((att.vx - def.vx) * n[0] + (att.vz - def.vz) * n[1]) / nl;
   const W = wpn(att);
-  const dmg = rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * (oneHanding(att) ? 0.7 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35);
+  let dmg = DMG_SCALE * rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * (oneHanding(att) ? 0.7 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35);
+  if (part === 'head') dmg = Math.min(dmg, PART_MAX.head * HEAD_CAP); // no single blow to the head kills
   damage(room, att, def, part, dmg, skd, w);
 }
 
