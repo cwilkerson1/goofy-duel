@@ -170,9 +170,13 @@ server.on('upgrade', (req, socket) => {
 
 // Fixed 60 Hz steps tied to the real clock, so the game runs at the same speed even when the
 // operating system wakes the timer late (macOS does this to background apps).
-let frame = 0;
+let frame = 0, lastWake = Date.now(), hiccup = 0, hiccupAt = 0;
 const t0 = process.hrtime.bigint();
 setInterval(() => {
+  // How late the timer woke us, worst over the last second: shown in players' connection stats (F3).
+  const nowMs = Date.now(), gap = nowMs - lastWake; lastWake = nowMs;
+  if (gap > hiccup || nowMs - hiccupAt > 1000) { hiccup = gap; hiccupAt = nowMs; }
+  if (gap > 150 && rooms.size) console.log(`server stalled for ${gap} ms`);
   const due = Math.floor(Number(process.hrtime.bigint() - t0) / 1e9 / TICK);
   if (due - frame > 30) frame = due - 1; // after a long stall, skip ahead instead of fast-forwarding
   while (frame < due) tick();
@@ -185,7 +189,7 @@ function tick() {
     const msg = JSON.stringify({
       t: 's', n: frame, phase: room.phase, msg: room.msg, song: room.song, timer: Math.max(0, Math.round(room.timer * 10) / 10),
       players: room.fighters.map((p) => (p ? snapshotPlayer(p) : null)),
-      ev: room.events, spectators: room.clients.size - room.fighters.filter(Boolean).length,
+      ev: room.events, spectators: room.clients.size - room.fighters.filter(Boolean).length, hz: hiccup,
     });
     room.events = [];
     for (const c of room.clients) c.send(msg);

@@ -934,21 +934,26 @@ const menu = (() => {
 })();
 
 // ---------- network ----------
-let ws = null, myId = null, connected = false, leaving = false;
+let ws = null, myId = null, connected = false, leaving = false, pingTimer = 0;
+const pings = [], netStats = { show: false, late: 0, frames: 0, worst: 0, fps: 0, worstShown: 0, since: 0 };
 let prev = null, cur = null, prevT = 0, curT = 0, mySpawn = -1;
 function connect(name, room) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}`);
   ws.onopen = () => { connected = true; send({ t: 'ping', c: performance.now() }); };
+  clearInterval(pingTimer); pingTimer = setInterval(() => send({ t: 'ping', c: performance.now() }), 2000); // keep the ping fresh
   ws.onclose = () => { connected = false; if (!leaving) setTimeout(() => connect(name, room), 1500); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'welcome') { myId = m.id; return; }
-    if (m.t === 'pong') { const r = performance.now() - m.c; pred.rtt = pred.rtt === null ? r : pred.rtt * 0.8 + r * 0.2; return; }
+    if (m.t === 'pong') { pings.push(performance.now() - m.c); if (pings.length > 5) pings.shift(); pred.rtt = [...pings].sort((x, y) => x - y)[pings.length >> 1]; return; }
     if (m.t === 's') {
+      if (curT && performance.now() - curT > 150) netStats.late++;
       prev = cur; prevT = curT; cur = m; curT = performance.now(); netBuffer.push(m, curT);
       const me = m.players.find((p) => p && p.id === myId);
-      pred.correct(me, m.phase, curT);
+      // Line our recorded path up with when this update should have arrived, not when it did, so a
+      // late update doesn't look like we were somewhere else and drag us around.
+      pred.correct(me, m.phase, Math.min(curT, (m.n / 60) * 1000 + netBuffer.offset));
       if (me && me.spawn !== mySpawn) { mySpawn = me.spawn; look.yaw = me.yaw; look.pitch = 0; }
       for (const ev of m.ev) handleEvent(ev);
     }
@@ -976,6 +981,7 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || menu.isOpen()) return;
   keys.add(e.code);
   if (e.code === 'KeyM' && !e.repeat) audio.muted = !audio.muted;
+  if (e.code === 'F3' && !e.repeat) { netStats.show = !netStats.show; e.preventDefault(); }
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
   if (e.code === 'KeyQ' && !e.repeat) feintNow();
   if (e.code === 'Space') e.preventDefault();
@@ -1156,6 +1162,20 @@ function blendPlayer(q, p, k) {
   out.parts = p.parts; out.dead = p.dead; out.weapon = p.weapon; out.blocking = p.blocking; out.gdir = p.gdir;
   return out;
 }
+const EXTRAPOLATE_MS = 300;
+// When late updates arrive and the opponent's true position differs from where we drew them, glide
+// over the gap instead of jumping: the difference is kept as an offset that fades out quickly.
+const smoothing = new Map();
+function smoothOut(o) {
+  const now = performance.now(), sm = smoothing.get(o.id);
+  if (!sm || sm.spawn !== o.spawn || o.dead) { smoothing.set(o.id, { spawn: o.spawn, x: o.x, z: o.z, ex: 0, ez: 0, t: now }); return; }
+  const dt = Math.min(0.1, (now - sm.t) / 1000), moved = Math.hypot(o.x - sm.x, o.z - sm.z);
+  // a step bigger than anyone can run in one frame is a correction, not movement
+  if (moved > 7 * dt + 0.03 && moved < 2) { sm.ex += sm.x - o.x; sm.ez += sm.z - o.z; }
+  const fade = Math.exp(-10 * dt); sm.ex *= fade; sm.ez *= fade;
+  sm.x = o.x; sm.z = o.z; sm.t = now;
+  o.x += sm.ex; o.z += sm.ez;
+}
 function interpPlayers() {
   if (!cur) return [];
   const B = netBuffer;
@@ -1165,14 +1185,18 @@ function interpPlayers() {
   while (i > 0 && B.snaps[i - 1].t > renderT) i--;
   const a = B.snaps[Math.max(0, i - 1)], b = B.snaps[i];
   const span = b.t - a.t;
-  // past the newest update: hold it (with at most a sliver of extrapolation) rather than jumping
-  const k = span > 0 ? Math.max(0, Math.min(1.15, (renderT - a.t) / span)) : 1;
+  const k = span > 0 ? Math.max(0, Math.min(1, (renderT - a.t) / span)) : 1;
+  // When updates stall (a Wi-Fi hiccup holds everything up), keep the opponent moving the way they
+  // were going for a moment instead of freezing them, and finish the swing they were in.
+  const ahead = Math.min(EXTRAPOLATE_MS, Math.max(0, renderT - b.t)) / 1000;
   return cur.players.map((p) => {
     if (!p) return null;
     const pa = a.m.players.find((o) => o && o.id === p.id), pb = b.m.players.find((o) => o && o.id === p.id);
     if (!pa || !pb) return p;
     // positions come from the buffered moment; health, limbs and death are always the latest
     const o = blendPlayer(pa, pb, k);
+    if (ahead > 0 && !o.dead && !(o.downT > 0)) { o.x += (pb.vx || 0) * ahead; o.z += (pb.vz || 0) * ahead; if (o.state === 'active' || o.state === 'recover') o.st += ahead; }
+    smoothOut(o);
     return { ...o, parts: p.parts, dead: p.dead, deathT: p.dead ? o.deathT : 0, fallYaw: p.dead ? p.fallYaw : o.fallYaw, headless: p.headless, weapon: p.weapon, score: p.score, stam: p.stam, bleed: p.bleed, bruise: p.bruise, color: p.color, name: p.name };
   });
 }
@@ -1206,6 +1230,12 @@ function drawHud(players, me, opp) {
   hctx.clearRect(0, 0, w, h);
   if (hurtFlash > 0) { hctx.fillStyle = `rgba(200,0,0,${hurtFlash * 0.35})`; hctx.fillRect(0, 0, w, h); }
   if (qualityToast > 0) { hctx.globalAlpha = Math.min(1, qualityToast); text(toastText, w / 2, h - 44, 16, '#fff'); hctx.globalAlpha = 1; }
+  // F3: connection and frame-rate stats, to tell a slow connection from a slow computer or server.
+  if (netStats.show) {
+    const lines = [`${netStats.fps} fps, slowest frame ${Math.round(netStats.worstShown)} ms`, `ping ${pred.rtt === null ? '?' : Math.round(pred.rtt)} ms, smoothing ${Math.round(netBuffer.delay)} ms`,
+      `late updates ${netStats.late}, server hiccup ${cur && cur.hz != null ? cur.hz : '?'} ms`];
+    lines.forEach((l, i) => text(l, w - 12, h - 92 + i * 18, 13, '#fff', 'right'));
+  }
   if (S.fps) text(`${perf.fps} fps`, w - 12, 22, 14, perf.fps >= 50 ? '#9be89b' : perf.fps >= 30 ? '#ffd27a' : '#ff8a7a', 'right');
 
   if (opp && !opp.dead) { const s = project(V(skeleton(opp).head).add(new THREE.Vector3(0, 0.32, 0))); if (s) text(opp.name, s[0], s[1], 15, TEAM_CSS[opp.color]); }
@@ -1368,11 +1398,14 @@ function footsteps(p, isMe) {
 }
 
 // ---------- main loop ----------
+let lastView = null; // ?debug only: the players as last drawn
 let last = performance.now(), clock = 0, lastPhase = '', wasHeavy = false;
 // When the duel is won, everyone sees the result for a few seconds and then goes back to the start screen.
 const MATCH_OVER_WAIT = 8000; let matchOverAt = 0;
 function frame(now) {
-  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; clock += dt;
+  const ft = now - last, dt = Math.max(0, Math.min(0.05, ft / 1000)); last = now; clock += dt;
+  netStats.frames++; netStats.worst = Math.max(netStats.worst, ft);
+  if (now - netStats.since > 1000) { netStats.fps = netStats.frames; netStats.worstShown = netStats.worst; netStats.frames = 0; netStats.worst = 0; netStats.since = now; }
   const players = interpPlayers().slice();
   let me = players.find((p) => p && p.id === myId) || null;
   const opp = players.find((p) => p && p.id !== myId) || null;
@@ -1401,6 +1434,7 @@ function frame(now) {
   // Sync knight meshes with the players in the arena.
   const ids = new Set(players.filter(Boolean).map((p) => p.id));
   for (const [id, k] of knights) if (!ids.has(id)) { k.dispose(); knights.delete(id); }
+  lastView = players;
   for (const p of players) {
     if (!p) continue;
     let k = knights.get(p.id);
@@ -1573,4 +1607,4 @@ const audio = {
 
 // For automated testing: ?debug exposes a couple of hooks.
 let debugCam = null, debugPose = null;
-if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get view() { return lastView; }, get pred() { return pred; }, get net() { return netBuffer; }, get fx() { return { hurtFlash, shake, fightFlash }; } };

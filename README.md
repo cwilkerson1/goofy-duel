@@ -63,6 +63,7 @@ mouse (press **Esc** to let go).
 | Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked and they're short range. **Land it** and the target is knocked flat on their back for about two seconds: they can't block, swing or move until they've got up, so step in and look down to hit them on the ground. A kick burns most of your stamina (65 of 100) and you need at least 40 to throw one. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
 | Mute | **M** |
 | Settings menu (mouse, volume), or leave the arena | **Esc** (or ⚙ Settings on the start screen) |
+| Connection and frame-rate stats, for tracking down stutter | **F3** |
 
 **Reading attacks.** There are no hints. Watch where their weapon is drawn back to: a swing drawn on
 *their* right arrives on *your* left. The only glow is white, when their attack has become a heavy.
