@@ -1097,6 +1097,7 @@ function handleEvent(ev) {
       // A sweet-spot hit sprays more and lands with a heavy thud; a handle or shaft hit barely bleeds.
       blood.burst(V(ev.pos), ev.zm >= 1.25 ? 45 : ev.zm < 0.6 ? 8 : 22, new THREE.Vector3(ev.dir[0], 0, ev.dir[1]), ev.zm >= 1.25 ? 1.3 : 1);
       audio.hitFor(ev.weapon); if (ev.zm >= 1.25) audio.thud();
+      if (Math.random() < 0.6) sfx.play('grunt', 0.5, 1, 0.05); // the one who got hit, if there are recordings of grunts
       if (mine) { shake = ev.zm >= 1.25 ? 0.1 : 0.06; hurtFlash = ev.zm >= 1.25 ? 0.7 : 0.5; }
       crowd.cheer = Math.min(1, crowd.cheer + 0.25);
       break;
@@ -1518,20 +1519,44 @@ const music = (() => {
   };
 })();
 
+// Recorded sound effects, if any are installed in public/sfx/<kind>/ (listed by /sfx.json). Each kind
+// can have several takes; one is picked at random and nudged in pitch so repeats don't sound identical.
+// Kinds with no recordings fall back to the synthesized sounds below.
+const BLUNT_IDS = new Set(['hammer', 'mace', 'flail', 'fists']);
+const sfx = {
+  buffers: {}, loading: false,
+  load() {
+    if (this.loading || !audio.ctx) return; this.loading = true;
+    fetch('/sfx.json').then((r) => r.json()).then((list) => {
+      for (const [kind, urls] of Object.entries(list)) for (const u of urls) {
+        fetch(u).then((r) => r.arrayBuffer()).then((b) => audio.ctx.decodeAudioData(b)).then((buf) => (this.buffers[kind] ||= []).push(buf)).catch(() => {});
+      }
+    }).catch(() => {});
+  },
+  play(kind, vol = 0.5, rate = 1, delay = 0) {
+    const list = this.buffers[kind];
+    if (!list || !list.length || !audio.ok()) return false;
+    const src = audio.ctx.createBufferSource(), g = audio.ctx.createGain();
+    src.buffer = list[(Math.random() * list.length) | 0]; src.playbackRate.value = rate * (0.94 + Math.random() * 0.12);
+    g.gain.value = vol; src.connect(g); g.connect(audio.out()); src.start(audio.ctx.currentTime + delay);
+    return true;
+  },
+};
+
 const audio = {
   ctx: null, muted: false,
-  init() { if (!this.ctx) { try { this.ctx = new AudioContext(); } catch {} } else if (this.ctx.state === 'suspended') this.ctx.resume(); },
+  init() { if (!this.ctx) { try { this.ctx = new AudioContext(); } catch {} sfx.load(); } else if (this.ctx.state === 'suspended') this.ctx.resume(); },
   ok() { return this.ctx && !this.muted && S.sfx > 0; },
   out() { if (!this.master) { this.master = this.ctx.createGain(); this.master.connect(this.ctx.destination); } this.master.gain.value = S.sfx / 100; return this.master; },
   env(node, t, a, d, peak = 0.3) { const g = this.ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); node.connect(g); g.connect(this.out()); return g; },
   noise(dur) { const b = this.ctx.createBuffer(1, this.ctx.sampleRate * dur, this.ctx.sampleRate); const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = this.ctx.createBufferSource(); s.buffer = b; return s; },
   whoosh(dir) {
-    if (!this.ok()) return; const t = this.ctx.currentTime, n = this.noise(0.25), f = this.ctx.createBiquadFilter();
+    if (!this.ok() || sfx.play('swing', 0.45, dir === 'low' ? 0.8 : dir === 'over' ? 0.9 : 1)) return; const t = this.ctx.currentTime, n = this.noise(0.25), f = this.ctx.createBiquadFilter();
     f.type = 'bandpass'; f.Q.value = 2; f.frequency.setValueAtTime(dir === 'low' ? 400 : 900, t); f.frequency.exponentialRampToValueAtTime(dir === 'over' ? 300 : 2500, t + 0.2);
     n.connect(f); this.env(f, t, 0.03, 0.2, 0.25); n.start(t);
   },
   step(vol) {
-    if (!this.ok()) return; const t = this.ctx.currentTime, n = this.noise(0.12), f = this.ctx.createBiquadFilter();
+    if (!this.ok() || sfx.play('step', Math.min(1, vol * 3))) return; const t = this.ctx.currentTime, n = this.noise(0.12), f = this.ctx.createBiquadFilter();
     f.type = 'lowpass'; f.frequency.value = 500 + Math.random() * 300; n.connect(f); this.env(f, t, 0.004, 0.09, vol); n.start(t);
     const o = this.ctx.createOscillator(); o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.08); this.env(o, t, 0.003, 0.08, vol * 0.8); o.start(t); o.stop(t + 0.12);
     // a faint clink of armour
@@ -1544,18 +1569,24 @@ const audio = {
     this.env(o, t, 0.01, 0.2, 0.1); o.start(t); o.stop(t + 0.3);
   },
   thud() {
-    if (!this.ok()) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator();
+    if (!this.ok() || sfx.play('thud', 0.7)) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator();
     o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(50, t + 0.15); this.env(o, t, 0.005, 0.18, 0.5); o.start(t); o.stop(t + 0.25);
+    // the dull smack of the impact itself, under the boom
+    const n = this.noise(0.12), f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700; n.connect(f); this.env(f, t, 0.002, 0.08, 0.35); n.start(t);
   },
   squelch() {
-    if (!this.ok()) return; const t = this.ctx.currentTime, n = this.noise(0.4), f = this.ctx.createBiquadFilter();
+    if (!this.ok() || sfx.play('gore', 0.7)) return; const t = this.ctx.currentTime, n = this.noise(0.4), f = this.ctx.createBiquadFilter();
     f.type = 'lowpass'; f.frequency.setValueAtTime(1800, t); f.frequency.exponentialRampToValueAtTime(200, t + 0.35); n.connect(f); this.env(f, t, 0.01, 0.35, 0.5); n.start(t);
     const o = this.ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(300, t); o.frequency.exponentialRampToValueAtTime(1200, t + 0.12);
     this.env(o, t, 0.005, 0.12, 0.25); o.start(t); o.stop(t + 0.2);
   },
   clang() {
-    if (!this.ok()) return; const t = this.ctx.currentTime;
-    for (const fr of [1250, 1870, 2630]) { const o = this.ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = fr; this.env(o, t, 0.002, 0.5, 0.12); o.start(t); o.stop(t + 0.6); }
+    if (!this.ok() || sfx.play('clang', 0.6)) return; const t = this.ctx.currentTime, f0 = 480 + Math.random() * 220;
+    // Steel ringing: a struck bar's inharmonic overtones, the high ones dying away fastest, over a sharp scrape.
+    [[1, 0.9, 0.1], [2.76, 0.55, 0.07], [5.4, 0.3, 0.05], [8.93, 0.18, 0.035]].forEach(([r, d, v]) => {
+      const o = this.ctx.createOscillator(); o.frequency.value = f0 * r * (0.995 + Math.random() * 0.01); this.env(o, t, 0.001, d, v); o.start(t); o.stop(t + d + 0.05);
+    });
+    const n = this.noise(0.06), f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 3000; n.connect(f); this.env(f, t, 0.001, 0.05, 0.25); n.start(t);
   },
   slide() {
     if (!this.ok()) return; const t = this.ctx.currentTime, o = this.ctx.createOscillator();
@@ -1588,7 +1619,7 @@ const audio = {
     this.cheer();
   },
   hitFor(id) {
-    if (!this.ok()) return;
+    if (!this.ok() || sfx.play(BLUNT_IDS.has(id) ? 'blunt' : 'blade', 0.7)) return;
     if (id === 'mace') { this.thud(); this.notes([[170, 0, 0.14, 90]], 'square', 0.07); }
     else if (id === 'flail') { const t = this.ctx.currentTime, n = this.noise(0.18), f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3200; n.connect(f); this.env(f, t, 0.003, 0.16, 0.25); n.start(t); this.thud(); } // chain rattle
     else if (id === 'pick') { this.thud(); this.notes([[880, 0, 0.07], [1320, 0, 0.05]], 'triangle', 0.08); } // a sharp bite into plate

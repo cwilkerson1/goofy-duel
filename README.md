@@ -173,6 +173,13 @@ What happens when a part comes off:
 Every duel is **best of 5**: the first to win 3 rounds wins, the match ends there, and after a few seconds on the result everyone goes back to the start screen to set up the next one. To have more than one fight going at once, give each pair
 its own arena name on the start screen, or add `?room=name` to the link.
 
+## Sound effects
+
+Every sound is synthesized in the browser unless recorded ones are installed. Put audio files in
+folders under `public/sfx/` (`clang`, `blade`, `blunt`, `thud`, `swing`, `step`, `gore`, `grunt`) and
+they're used instead, with several takes per folder picked at random. `public/sfx/README.md` says
+which folder plays when. Kenney's free CC0 "Impact Sounds" and "RPG Audio" packs fit well.
+
 ## Files
 
 ```

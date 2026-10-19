@@ -17,7 +17,7 @@ const TICK = 1 / 60, SEND_EVERY = 2; // simulate at 60 Hz, broadcast at 30 Hz
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac', '.webm': 'audio/webm' };
-const MUSIC_DIR = path.join(ROOT, 'public', 'music');
+const MUSIC_DIR = path.join(ROOT, 'public', 'music'), SFX_DIR = path.join(ROOT, 'public', 'sfx');
 const isAudio = (f) => /\.(mp3|ogg|wav|m4a|aac|flac|webm)$/i.test(f);
 
 // The game's version: the git commit it's running, or the time the game code last changed.
@@ -39,6 +39,19 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
       res.end(JSON.stringify(err ? [] : files.filter(isAudio).sort().map((f) => '/music/' + encodeURIComponent(f))));
     });
+    return;
+  }
+  // Recorded sound effects: public/sfx/<kind>/ holds any number of takes of each sound (clang, blade,
+  // blunt, thud, swing, step, gore, grunt). Whatever's there is used; anything missing is synthesized.
+  if (url === '/sfx.json') {
+    const list = {};
+    let kinds = [];
+    try { kinds = fs.readdirSync(SFX_DIR, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch {}
+    for (const k of kinds) {
+      try { const f = fs.readdirSync(path.join(SFX_DIR, k)).filter(isAudio).sort(); if (f.length) list[k] = f.map((x) => `/sfx/${encodeURIComponent(k)}/${encodeURIComponent(x)}`); } catch {}
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+    res.end(JSON.stringify(list));
     return;
   }
   const base = url.startsWith('/shared/') ? ROOT : path.join(ROOT, 'public');
