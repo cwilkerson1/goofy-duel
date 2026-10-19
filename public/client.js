@@ -1418,7 +1418,7 @@ function frame(now) {
   if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(cur.song); }
-    if (cur.phase === 'over') { matchOverAt = performance.now(); setTimeout(() => { if (cur && cur.phase === 'over') $('menuLeave').onclick(); }, MATCH_OVER_WAIT); }
+    else if (cur.phase === 'over') { matchOverAt = performance.now(); setTimeout(() => { if (cur && cur.phase === 'over') $('menuLeave').onclick(); }, MATCH_OVER_WAIT); }
     else music.stop();
     lastPhase = cur.phase;
   }
