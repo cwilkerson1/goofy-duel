@@ -136,7 +136,10 @@ function watchFrameRate(dt) {
   if (perf.ft >= 0.5) { perf.fps = Math.round(perf.fn / perf.ft); perf.ft = 0; perf.fn = 0; }
   if (!S.auto || S.preset === 'Low' || document.hidden) { perf.t = 0; perf.n = 0; return; }
   perf.t += dt; perf.n++;
-  if (perf.t >= 3) { if (perf.n / perf.t < 45) setPreset(S.preset === 'High' ? 'Medium' : 'Low', 'lowered to keep it smooth'); perf.t = 0; perf.n = 0; }
+  // Changing quality rebuilds every shader, which freezes the game for a moment, so a drop decided
+  // mid-fight waits for the break between rounds.
+  if (perf.t >= 3) { if (perf.n / perf.t < 45) perf.pending = S.preset === 'High' ? 'Medium' : 'Low'; perf.t = 0; perf.n = 0; }
+  if (perf.pending && !(cur && (cur.phase === 'fight' || cur.phase === 'countdown'))) { setPreset(perf.pending, 'lowered to keep it smooth'); perf.pending = null; }
 }
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -996,24 +999,36 @@ function onServerMessage(data) {
     const m = JSON.parse(data);
     if (m.t === 'welcome') { myId = m.id; if (m.rtc) openFastLane(); return; }
     if (m.t === 'rtc-answer') { if (fast.pc) fast.pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => closeFastLane()); return; }
-    if (m.t === 'e') { for (const ev of m.ev) handleEvent(ev); return; }
+    if (m.t === 'e') { for (const ev of m.ev) { handleEvent(ev); noteEvent(ev); } return; }
     if (m.t === 'pong') { pings.push(performance.now() - m.c); if (pings.length > 5) pings.shift(); pred.rtt = [...pings].sort((x, y) => x - y)[pings.length >> 1]; return; }
     if (m.t === 's') {
       // The fast lane can deliver updates out of order: skip one older than what we have (a big jump
       // back means the server restarted, so start over from it).
       if (cur && m.n <= cur.n && m.n > cur.n - 600) return;
       if (curT && performance.now() - curT > 150) netStats.late++;
+      // (only when frames kept coming: if the computer itself stalled, every update looks late)
+      if (curT && performance.now() - curT > 250 && netStats.worst < 120) reportHitch('update', performance.now() - curT);
       prev = cur; prevT = curT; cur = m; curT = performance.now(); netBuffer.push(m, curT);
       const me = m.players.find((p) => p && p.id === myId);
       // Line our recorded path up with when this update should have arrived, not when it did, so a
       // late update doesn't look like we were somewhere else and drag us around.
       pred.correct(me, m.phase, Math.min(curT, (m.n / 60) * 1000 + netBuffer.offset));
       if (me && me.spawn !== mySpawn) { mySpawn = me.spawn; look.yaw = me.yaw; look.pitch = 0; }
-      for (const ev of m.ev) handleEvent(ev);
+      for (const ev of m.ev) { handleEvent(ev); noteEvent(ev); }
     }
   };
 }
 const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+// Tell the server (for its log) when this browser freezes: a slow frame means this computer stalled,
+// a late update means the connection did. At most one report a second, and only during a fight.
+let hitchAt = 0, recentEvents = [];
+const noteEvent = (ev) => { recentEvents.push([performance.now(), ev.t]); if (recentEvents.length > 20) recentEvents.shift(); };
+function reportHitch(kind, ms) {
+  const now = performance.now();
+  if (!cur || cur.phase !== 'fight' || now - hitchAt < 1000 || document.hidden) return;
+  hitchAt = now;
+  send({ t: 'hitch', kind, ms: Math.round(ms), fps: perf.fps, quality: S.preset, link: fastOpen() ? 'webrtc' : 'websocket', after: recentEvents.filter((e) => now - e[0] < 400).map((e) => e[1]).join(',') });
+}
 // The fast lane: a WebRTC data channel to the server that works like UDP, so one lost packet on Wi-Fi
 // is skipped instead of freezing everything behind it (see rtc.js on the server). Updates and movement
 // use it when it's up; everything else, and everything if it can't connect, uses the WebSocket.
@@ -1507,6 +1522,7 @@ let arenaName = '', copiedAt = 0;
 function frame(now) {
   const ft = now - last, dt = Math.max(0, Math.min(0.05, ft / 1000)); last = now; clock += dt;
   netStats.frames++; netStats.worst = Math.max(netStats.worst, ft);
+  if (ft > 150) reportHitch('frame', ft);
   if (now - netStats.since > 1000) { netStats.fps = netStats.frames; netStats.worstShown = netStats.worst; netStats.frames = 0; netStats.worst = 0; netStats.since = now; }
   const players = interpPlayers().slice();
   let me = players.find((p) => p && p.id === myId) || null;
@@ -1587,6 +1603,28 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// Warm-up: the first time the graphics card draws something new (a weapon, blood, a flying head, sparks,
+// the swing streak) it has to build a shader and upload textures, which can stall a frame for a moment.
+// Draw one of everything out of sight while the start screen is up, so that cost is paid before the fight.
+(() => {
+  const g = new THREE.Group(), knights = [new Knight(0), new Knight(1)];
+  Object.keys(WEAPONS).forEach((k, i) => { const w = makeWeapon(k); w.position.set((i % 7) * 0.4 - 1.2, Math.floor(i / 7) * 0.9, 0); g.add(w); });
+  for (const c of TEAM) { const h = makeHead(c, true); h.position.set(-1.5, 0.5, 0.3); g.add(h); }
+  g.add(makeFist(MAT.darkSteel));
+  const sp = new THREE.Mesh(new THREE.SphereGeometry(0.015, 4, 3), new THREE.MeshBasicMaterial({ color: 0xfff7a8 })); g.add(sp);
+  scene.add(g);
+  let n = 0;
+  const place = () => {
+    const f = new THREE.Vector3(); camera.getWorldDirection(f);
+    g.position.copy(camera.position).addScaledVector(f, 3); g.lookAt(camera.position);
+    knights.forEach((k, i) => { k.root.position.copy(g.position).addScaledVector(f, 0.5 * i); k.trail.visible = true; for (const c of k.root.children) c.visible = true; });
+    blood.burst(g.position, 20, f, 0.2); blood.decal(g.position.x, g.position.z, 0.1);
+    if (++n < 4) requestAnimationFrame(place);
+    else requestAnimationFrame(() => { scene.remove(g); knights.forEach((k) => k.dispose()); blood.clearDecals(); });
+  };
+  requestAnimationFrame(place);
+})();
 
 // ---------- goofy synth sounds ----------
 // Fight music: plays a random track from public/music/ when a fight starts, fades out when the round ends.
@@ -1738,4 +1776,4 @@ const audio = {
 
 // For automated testing: ?debug exposes a couple of hooks.
 let debugCam = null, debugPose = null;
-if (params.has('debug')) window.duel = { set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get view() { return lastView; }, get pred() { return pred; }, get net() { return netBuffer; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+if (params.has('debug')) window.duel = { renderer, set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get view() { return lastView; }, get pred() { return pred; }, get net() { return netBuffer; }, get fx() { return { hurtFlash, shake, fightFlash }; } };

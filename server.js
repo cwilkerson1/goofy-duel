@@ -184,6 +184,11 @@ server.on('upgrade', (req, socket) => {
     else if (m.t === 'kick') kick(me, room);
     else if (m.t === 'feint') feint(me, room);
     else if (m.t === 'rematch') voteRematch(room, me);
+    else if (m.t === 'hitch' && !(ws.hitchLogged > Date.now() - 1000)) {
+      // A player's browser reporting a freeze: 'frame' is their computer stalling, 'update' their connection.
+      ws.hitchLogged = Date.now(); const str = (v) => String(v ?? '').slice(0, 80);
+      console.log(`[${room.name}] ${me.name}'s game froze for ${str(m.ms)} ms: ${m.kind === 'frame' ? 'slow frame (their computer)' : 'late update (connection)'}, ${str(m.fps)} fps, quality ${str(m.quality)}, link ${str(m.link)}${m.after ? `, right after: ${str(m.after)}` : ''}`);
+    }
     else if (m.t === 'atk') tryAttack(me, m.d);
   };
   const openFastLane = (sdp) => {
