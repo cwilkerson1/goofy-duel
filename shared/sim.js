@@ -51,7 +51,7 @@ export const WEAPONS = {
   dagger:     { name: 'Rondel Dagger',     emoji: '🔪', small: true, len: 0.45, dmg: 0.7,  sever: 0.5, draw: 0.55, swing: 0.7, rec: 0.6, stam: 0.6, move: 1.15, knock: 0.6, stun: 0,    block: 1.4, weight: 1,   color: '#c7c7c7', line: 'Tiny reach, lightning quick.' },
   axe:        { name: 'Battle Axe',        emoji: '🪓', len: 0.85, dmg: 1.0, sever: 1.6, draw: 1.2, swing: 0.85, rec: 1.3, stam: 1.2, move: 0.95, knock: 1.1, stun: 0,    block: 1,   weight: 1,   color: '#b5651d', line: 'Takes limbs off clean.' },
   hammer:     { name: 'War Hammer',        emoji: '🔨', len: 0.9,  dmg: 1.45,  sever: 0.6, draw: 1.5, swing: 1.35, rec: 1.2, stam: 1.35, move: 0.9, two: true, grip: 0.3, knock: 2.6, stun: 0.5,  block: 1,   weight: 1,   color: '#7a6a5a', line: 'Every hit a concussion.' },
-  spear:      { name: 'Spear',             emoji: '🔱', len: 1.6,  dmg: 1.25,  sever: 0.5, draw: 1.0, swing: 1.05, rec: 1.3, stam: 0.9, move: 1, two: true, grip: 0.4, knock: 1.4, stun: 0,    block: 1.1, weight: 1,   color: '#8e7d5a', line: 'Keep them at the point.' },
+  halberd:    { name: 'Halberd',           emoji: '🔱', len: 1.5,  dmg: 1.3,  sever: 1.4, draw: 1.35, swing: 1.3, rec: 1.25, stam: 1.3, move: 0.9, two: true, grip: 0.4, knock: 1.7, stun: 0.15, block: 1.1, weight: 1,  color: '#7d8a96', line: 'An axe on a pole, with a spike on top.' },
   scythe:     { name: 'War Scythe',        emoji: '💀', len: 1.3,  dmg: 1.3,  sever: 1.5, draw: 1.4, swing: 1.55, rec: 1.1, stam: 1.2, move: 0.9, two: true, grip: 0.4, knock: 1,   stun: 0,    block: 1.1, weight: 0.8, color: '#4a4a5a', line: 'Strike with the heel of the blade.' },
   arming:     { name: 'Arming Sword',      emoji: '🗡️', len: 0.78, dmg: 0.85, sever: 1,   draw: 0.75, swing: 0.85, rec: 0.8, stam: 0.8, move: 1.05, knock: 0.9, stun: 0,   block: 0.9, weight: 1,   color: '#b8c4d0', line: 'Short, light and quick.' },
   mace:       { name: 'Flanged Mace',      emoji: '⚒️', len: 0.75, dmg: 1.2, sever: 0.6, draw: 1, swing: 1, rec: 1, stam: 1.05, move: 1, knock: 1.8, stun: 0.35, block: 1.1, weight: 1,   color: '#8a8f96', line: 'Dents helmets, rattles skulls.' },
@@ -73,7 +73,8 @@ export const HITBOX = {
   dagger:     [Z(0, 0.02, 0, 0.3, 0.025, 0.8), Z(0, 0.3, 0, 0.47, 0.025, 1.3, 'right in the point')],
   axe:        [Z(0, -0.1, 0, 0.64, 0.025, 0.35, 'just the handle'), Z(0.12, 0.71, 0.12, 0.79, 0.1, 1.4, 'axe head')],
   hammer:     [Z(0, -0.08, 0, 0.74, 0.026, 0.3, 'just the handle'), Z(-0.075, 0.82, 0.075, 0.82, 0.077, 1.4, 'hammer face')],
-  spear:      [Z(0, -0.1, 0, 1.45, 0.022, 0.3, 'shaft poke'), Z(0, 1.46, 0, 1.71, 0.04, 1.4, 'spear tip')],
+  // The halberd's axe blade faces the target (+x) near the top of the pole; a spike runs on up past it.
+  halberd:    [Z(0, -0.1, 0, 1.06, 0.022, 0.35, 'just the pole'), Z(0.13, 1.1, 0.13, 1.3, 0.09, 1.45, 'halberd blade'), Z(0, 1.33, 0, 1.52, 0.03, 1.15, 'the spike')],
   // The scythe's sweet spot is the heel, the inner part of the blade next to the pole, where it's strongest.
   scythe:     [Z(0, -0.1, 0, 1.24, 0.024, 0.4, 'just the pole'), Z(0.01, 1.315, 0.16, 1.277, 0.05, 1.6, 'HEEL STRIKE'), Z(0.16, 1.277, 0.52, 1.186, 0.035, 1)],
   arming:     [Z(0, 0.03, 0, 0.28, 0.028, 0.6, 'near the hilt'), Z(0, 0.28, 0, 0.5, 0.028, 1), Z(0, 0.5, 0, 0.7, 0.028, 1.25, 'sweet spot'), Z(0, 0.7, 0, 0.81, 0.028, 1)],

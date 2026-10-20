@@ -120,7 +120,7 @@ opponent's are revealed when it stops, and the fight begins.
 | 🔪 Rondel Dagger | Very fast, very short, weak blocks. A stabbing weapon, so it rarely takes limbs |
 | 🪓 Battle Axe | Very good at taking arms and legs off |
 | 🔨 War Hammer | Two-handed. Every hit dazes and shoves; bad at severing |
-| 🔱 Spear | Two-handed. The longest reach in the game; deadly thrusts, but it rarely takes limbs |
+| 🔱 Halberd | Two-handed. An axe blade on a long pole with a spike on top: long reach, big hits, takes limbs, slow to swing |
 | 💀 War Scythe | Two-handed. Long, slow, and the best limb remover after Excalibur |
 | 🗡️ Arming Sword | A short one-handed sword: quick and light, a little less reach and damage than the longsword |
 | ⚒️ Flanged Mace | One-handed and blunt. Built to beat armour: hits hard, dazes and shoves |
@@ -138,7 +138,7 @@ blood and lands with a heavy thud, while a handle or shaft hit barely bleeds.
 | Longsword, Greatsword, Excalibur | Upper third of the blade | Near the hilt |
 | Dagger | The point | |
 | Axe, Hammer, Mace | The head | The handle |
-| Spear | The tip, at the far end of its reach | Shaft pokes up close |
+| Halberd | The axe blade, near the top of the pole (the spike on top hits well too) | The pole, up close |
 | Scythe | **The heel**, where the blade meets the pole: the strongest hit in the game | The pole |
 | Arming Sword | Upper third of the blade | Near the hilt |
 | Flail | The spiked ball | The handle, and the chain is weak |
@@ -151,7 +151,7 @@ they can win by bruising someone to death.
 **Practice one weapon:** `WEAPON=scythe npm start` makes the wheel always land on that weapon
 (use any id from `WEAPONS`, such as `mace`, `flail`, `pick` or `arming`).
 
-**Two-handed weapons.** The big ones (greatsword, hammer, spear and scythe) are held with both hands.
+**Two-handed weapons.** The big ones (greatsword, hammer, halberd and scythe) are held with both hands.
 They swing slower than one-handed weapons but hit about 20% harder. Lose an arm while holding one and
 you swing it one-handed: slower still, and 30% weaker.
 
@@ -166,7 +166,7 @@ stamina cost and footwork, and the wheel tells you what you got (for example "qu
 | Longsword | The baseline |
 | Excalibur | Quicker than a longsword in every way |
 | Mace, War Pick | Close to the baseline; the pick winds up a bit slower |
-| Spear | Quick jab with the longest reach, but slow to pull back |
+| Halberd | Big, slow chopping arcs with the longest reach in the game |
 | Axe | Slow wind-up, then a fast chop, then a long recovery |
 | Hammer | The slowest wind-up; costs lots of stamina |
 | Scythe | Slow wind-up and a long, sweeping swing |

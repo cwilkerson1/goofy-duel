@@ -590,7 +590,14 @@ function makeWeapon(id) {
     case 'dagger': glow = steel(); add(blade(0.045, L, 0.007, 0.3), glow, 0.02); add(guard(0.1), MAT.brass, 0.01); grip(); break;
     case 'axe': glow = steel(); add(cyl(0.022, L + 0.2), MAT.wood, L / 2 - 0.1); add(box(0.24, 0.2, 0.025), glow, L - 0.1, 0.12); break;
     case 'hammer': glow = std(0x777777, { metalness: 0.6 }); add(cyl(0.024, L + 0.35), MAT.wood, L / 2 - 0.18); add(box(0.3, 0.15, 0.15), glow, L - 0.08); break;
-    case 'spear': glow = steel(); add(cyl(0.02, L + 0.4), MAT.wood, L / 2 - 0.3); add(new THREE.ConeGeometry(0.045, 0.26, 6), glow, L - 0.02); break;
+    case 'halberd': {
+      // Ash pole, a broad axe blade facing the target, a back spike, and a spearpoint on top.
+      glow = steel(); add(cyl(0.022, L + 0.35), MAT.wood, L / 2 - 0.27);
+      add(box(0.2, 0.26, 0.014), glow, L - 0.3, 0.13);
+      add(box(0.06, 0.3, 0.03), MAT.steel, L - 0.3, 0.03); // the socket that holds the head on
+      const back = add(new THREE.ConeGeometry(0.025, 0.14, 6), MAT.steel, L - 0.3, -0.09); back.rotation.z = Math.PI / 2;
+      add(new THREE.ConeGeometry(0.03, 0.24, 6), glow, L - 0.05); break;
+    }
     case 'scythe': {
       glow = std(0xbfc6cc, { metalness: 0.8, roughness: 0.3 }); add(cyl(0.022, L + 0.5), std(0x3a2a1a), L / 2 - 0.25);
       const b = add(box(0.55, 0.06, 0.012), glow, L - 0.05, 0.26); b.rotation.z = -0.25; break;
