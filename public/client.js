@@ -1096,6 +1096,7 @@ addEventListener('mousemove', (e) => {
   const now = performance.now(), leak = Math.exp(-Math.min(1, (now - (flick.t || now)) / 1000) * 18); flick.t = now;
   flick.x = flick.x * leak + e.movementX; flick.y = flick.y * leak + e.movementY;
   recentMoves.push([now, e.movementX, e.movementY]); while (recentMoves.length && now - recentMoves[0][0] > 150) recentMoves.shift();
+  if (isBlocking() && !atkHeld) { steerGuard(e.movementX, e.movementY); flick.x = flick.y = 0; return; }
   const ax = Math.abs(flick.x), ay = Math.abs(flick.y), need = atkHeld ? 48 : 24;
   if (Math.max(ax, ay) > need) {
     if (ax > ay * 1.2) { const right = flick.x > 0; dir = right !== !!S.flipDir ? 'right' : 'left'; }
@@ -1103,6 +1104,23 @@ addEventListener('mousemove', (e) => {
     flick.x = flick.y = 0;
   }
 });
+// Blocking: while right click is held, the guard follows the mouse like a stick. Every bit of movement
+// counts (no flick needed): push left or right to guard that side, up to guard overhead, and back
+// down from overhead to return to the sides. A little stickiness at the edges stops it flickering.
+const guard = { x: 0, y: 0 }, GUARD_R = 50;
+function aimGuardAt(d) { guard.x = d === 'left' ? -GUARD_R * 0.5 : d === 'right' ? GUARD_R * 0.5 : 0; guard.y = d === 'over' ? -GUARD_R * 0.5 : 0; }
+function steerGuard(mx, my) {
+  guard.x += mx * (S.flipDir ? -1 : 1); guard.y += my;
+  const l = Math.hypot(guard.x, guard.y); if (l > GUARD_R) { guard.x *= GUARD_R / l; guard.y *= GUARD_R / l; }
+  const up = -guard.y, side = Math.abs(guard.x);
+  if (dir === 'over') {
+    if (up < side && side > 10) dir = guard.x > 0 ? 'right' : 'left';
+    else if (up < -8) dir = guard.x > 2 ? 'right' : guard.x < -2 ? 'left' : guard.lastSide || 'right'; // pulled back down
+  }
+  else if (up > side * 1.3 && up > 18) dir = 'over';
+  else if (side > 10 && (guard.x > 0) !== (dir === 'right')) dir = guard.x > 0 ? 'right' : 'left';
+  if (dir !== 'over') guard.lastSide = dir;
+}
 addEventListener('mousedown', (e) => {
   if (!joined || menu.isOpen()) return;
   audio.init();
@@ -1116,7 +1134,7 @@ addEventListener('mousedown', (e) => {
     // Pressed while the last swing is still going: the server remembers it and starts it the moment it can.
     if (s && !s.dead && ['idle', 'active', 'recover'].includes(s.state) && s.stam >= 5) swingIntent = { pressT: performance.now(), made: performance.now(), relT: null, b: isBlocking(), q: s.state !== 'idle', seq: holdSeq };
   }
-  if (e.button === 2) { blockHeld = true; if (atkHeld || swingIntent) feintAt = performance.now(); }
+  if (e.button === 2) { blockHeld = true; aimGuardAt(dir); if (atkHeld || swingIntent) feintAt = performance.now(); }
   if (e.button === 3 || e.button === 4) send({ t: 'kick' });
 });
 addEventListener('mouseup', (e) => {
@@ -1392,7 +1410,8 @@ function drawHud(players, me, opp) {
       bodyChart(w - 300, 108, opp);
     }
 
-    if (me.stun > 0) text('💫 STUNNED 💫', w / 2, h / 2 + 115, 26, '#ffd23f');
+    // Blocking a heavy still staggers you briefly (riposte is ready once it wears off); anything else is a real stun.
+    if (me.stun > 0) text(me.riposte ? 'Heavy blow! Guard staggered' : '💫 STUNNED 💫', w / 2, h / 2 + 115, me.riposte ? 20 : 26, '#ffd23f');
     if (me.dead) text(me.headless ? "You've lost your head!" : 'You have been slain.', w / 2, h / 2 + 140, 30, '#ff6b6b');
   } else if (cur.players.some(Boolean)) text('Spectating', w / 2, 90, 18);
 
