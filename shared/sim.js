@@ -464,7 +464,9 @@ const canStart = (p) => canAct(p) && !(p.flinch > 0) && p.stam >= 5
   && ((p.state === 'idle' && !(p.cd > 0)) || (p.state === 'recover' && p.comboOk && p.st >= p.recDur * T.COMBO_AT));
 export function startHold(p, dir) {
   if (!canStart(p)) {
-    if (!p.dead && p.state !== 'hold') p.queued = { dir, t: 0, release: false };
+    // Remember the click so it swings as soon as it can, including a click made while your last
+    // swing is still winding up after you let go (spam clicking chains swings instead of losing them).
+    if (!p.dead && (p.state !== 'hold' || p.release)) p.queued = { dir, t: 0, release: false };
     return false;
   }
   p.state = 'hold'; p.st = 0; p.release = false; p.heavy = false; p.blocking = false; p.queued = null; p.comboOk = false;
@@ -765,6 +767,7 @@ export function snapshotPlayer(p) {
     id: p.id, name: p.name, x: r3(p.x), y: r3(p.y), z: r3(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz), yaw: r3(p.yaw), pitch: r2(p.pitch),
     onGround: p.onGround, gdir: p.gdir, state: p.state, sdir: p.sdir, st: r3(p.st), saim: Math.round(p.saim), recDur: p.recDur,
     heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
+    ack: p.ack || 0, queued: !!p.queued,
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
     weapon: p.weapon, walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),

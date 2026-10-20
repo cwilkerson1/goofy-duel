@@ -105,6 +105,7 @@ function wsAccept(req, socket) {
     return Buffer.concat([head, payload]);
   };
   ws.send = (str) => { if (ws.open && !socket.destroyed) socket.write(frame(1, Buffer.from(str))); };
+  ws.backlog = () => socket.writableLength; // bytes queued up that this player's connection hasn't taken yet
   const close = () => { if (!ws.open) return; ws.open = false; socket.destroy(); ws.onclose(); };
   socket.on('data', (chunk) => {
     buf = Buffer.concat([buf, chunk]);
@@ -157,7 +158,14 @@ server.on('upgrade', (req, socket) => {
 
   ws.onmessage = (raw) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
+    // Connection diagnostics: browsers send at least every 0.1 s, so a long silence is their upload stalling.
+    const nowMs = Date.now();
+    if (ws.lastMsg && nowMs - ws.lastMsg > 400 && room.phase === 'fight') console.log(`[${room.name}] nothing arrived from ${me.name} for ${nowMs - ws.lastMsg} ms (their connection stalled)`);
+    ws.lastMsg = nowMs;
     if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
+    // Every attack press is numbered, and the number of the last one handled goes back in the updates,
+    // so the browser can tell "the server hasn't heard yet" (slow link) from "the server said no".
+    if (m.t === 'hold' && Number.isFinite(m.q)) me.ack = m.q;
     if (m.t === 'in') {
       const i = me.input, c = (v) => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
       i.mf = c(m.mf); i.ms = c(m.ms); i.j = m.j ? 1 : 0; i.b = m.b ? 1 : 0; i.s = m.s ? 1 : 0; i.d = m.d;
@@ -211,7 +219,12 @@ function tick() {
       ev: room.events, spectators: room.clients.size - room.fighters.filter(Boolean).length, hz: hiccup,
     });
     room.events = [];
-    for (const c of room.clients) c.send(msg);
+    for (const c of room.clients) {
+      c.send(msg);
+      // Updates piling up unsent means this player's download can't keep up (or has stalled).
+      const b = c.backlog ? c.backlog() : 0;
+      if (b > 20000 && !(c.slowAt > Date.now() - 2000)) { c.slowAt = Date.now(); console.log(`[${room.name}] updates to ${c.me ? c.me.name : 'a player'} are backing up (${Math.round(b / 1024)} KB unsent; their download is stalling)`); }
+    }
   }
 }
 

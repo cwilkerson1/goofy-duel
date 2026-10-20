@@ -1064,10 +1064,10 @@ addEventListener('mousedown', (e) => {
     // Moving the mouse as you click picks that side, even with a short, unhurried motion.
     const mx = recentMoves.reduce((a, m) => a + m[1], 0), my = recentMoves.reduce((a, m) => a + m[2], 0);
     if (Math.hypot(mx, my) > 20) { if (Math.abs(mx) > Math.abs(my) * 1.2) dir = (mx > 0) !== !!S.flipDir ? 'right' : 'left'; else if (my < 0 && -my > Math.abs(mx) * 1.2) dir = 'over'; }
-    atkHeld = true; send({ t: 'hold', d: dir });
+    atkHeld = true; holdSeq++; send({ t: 'hold', d: dir, q: holdSeq });
     const s = cur && cur.players.find((q) => q && q.id === myId);
     // Pressed while the last swing is still going: the server remembers it and starts it the moment it can.
-    if (s && !s.dead && ['idle', 'active', 'recover'].includes(s.state) && s.stam >= 5) swingIntent = { pressT: performance.now(), made: performance.now(), relT: null, b: isBlocking(), q: s.state !== 'idle' };
+    if (s && !s.dead && ['idle', 'active', 'recover'].includes(s.state) && s.stam >= 5) swingIntent = { pressT: performance.now(), made: performance.now(), relT: null, b: isBlocking(), q: s.state !== 'idle', seq: holdSeq };
   }
   if (e.button === 2) { blockHeld = true; if (atkHeld || swingIntent) feintAt = performance.now(); }
   if (e.button === 3 || e.button === 4) send({ t: 'kick' });
@@ -1086,7 +1086,8 @@ function feintNow() { feintAt = performance.now(); swingIntent = null; send({ t:
 // Your own guard and swings are shown the moment you act, instead of a round trip to the server
 // later: the newest server state, run forward, plus your block, guard side and wind-up predicted
 // from your own inputs. The server still decides every hit; this only moves your weapon sooner.
-let swingIntent = null; // { pressT, relT, b, dir, aim }: a swing you started that the server hasn't shown yet
+let swingIntent = null; // { pressT, relT, b, dir, aim, seq }: a swing you started that the server hasn't shown yet
+let holdSeq = 0;
 function predictMyAction(p, now) {
   const s = cur && cur.players.find((q) => q && q.id === myId);
   if (!s || s.dead || p.dead) { swingIntent = null; return p; }
@@ -1105,7 +1106,10 @@ function predictMyAction(p, now) {
       if (now - I.made > (T.COMBO_AT + 1) * 1000) swingIntent = null;
     } else if (s.state !== 'idle' && s.state !== 'hold') swingIntent = null; // the server has caught up
     else if (!free || (I.relT === null && isBlocking() && !I.b)) swingIntent = null; // stunned, or feinted
-    else if (s.state === 'idle' && now - I.pressT > wait && now - go < 0) swingIntent = null; // the server said no
+    // The server said no: it has handled this press (ack) and you're still standing idle with nothing queued.
+    // Until it has handled it, keep showing the wind-up however slow the link is, rather than freezing.
+    else if (s.state === 'idle' && s.ack >= I.seq && !s.queued && now - I.pressT > 120) swingIntent = null;
+    else if (s.state === 'idle' && now - I.made > 3000) swingIntent = null; // give up eventually
     else if (now - go > tm(o, 'ACTIVE') * 1000 + wait) swingIntent = null;
   }
   if (swingIntent && !(I.q && (s.state === 'active' || s.state === 'recover') && now < I.pressT)) {
@@ -1201,7 +1205,7 @@ const netBuffer = {
   },
 };
 function blendPlayer(q, p, k) {
-  if (!q || Math.hypot(q.x - p.x, q.z - p.z) > 2 || q.spawn !== p.spawn) return p; // teleported (new round): don't slide
+  if (!q || Math.hypot(q.x - p.x, q.z - p.z) > 6 || q.spawn !== p.spawn) return p; // teleported (new round): don't slide
   const L = (a, b) => a + (b - a) * k;
   const dy = Math.atan2(Math.sin(p.yaw - q.yaw), Math.cos(p.yaw - q.yaw));
   const out = { ...(k < 0.5 ? q : p), x: L(q.x, p.x), y: L(q.y, p.y), z: L(q.z, p.z), yaw: q.yaw + dy * k, walk: L(q.walk, p.walk), stun: L(q.stun, p.stun), deathT: L(q.deathT, p.deathT),
@@ -1211,7 +1215,9 @@ function blendPlayer(q, p, k) {
   out.parts = p.parts; out.dead = p.dead; out.weapon = p.weapon; out.blocking = p.blocking; out.gdir = p.gdir;
   return out;
 }
-const EXTRAPOLATE_MS = 300;
+// How long to keep guessing through a stall. The guess eases off (the opponent coasts to a stop over
+// about COAST seconds) so a long gap can't fling them far past where they really are.
+const EXTRAPOLATE_MS = 800, COAST = 0.35;
 // When late updates arrive and the opponent's true position differs from where we drew them, glide
 // over the gap instead of jumping: the difference is kept as an offset that fades out quickly.
 const smoothing = new Map();
@@ -1220,8 +1226,9 @@ function smoothOut(o) {
   if (!sm || sm.spawn !== o.spawn || o.dead) { smoothing.set(o.id, { spawn: o.spawn, x: o.x, z: o.z, ex: 0, ez: 0, t: now }); return; }
   const dt = Math.min(0.1, (now - sm.t) / 1000), moved = Math.hypot(o.x - sm.x, o.z - sm.z);
   // a step bigger than anyone can run in one frame is a correction, not movement
-  if (moved > 7 * dt + 0.03 && moved < 2) { sm.ex += sm.x - o.x; sm.ez += sm.z - o.z; }
-  const fade = Math.exp(-10 * dt); sm.ex *= fade; sm.ez *= fade;
+  // (Up to a few metres: after a long stall the opponent may have covered real ground. Glide there.)
+  if (moved > 7 * dt + 0.03 && moved < 6) { sm.ex += sm.x - o.x; sm.ez += sm.z - o.z; }
+  const fade = Math.exp(-8 * dt); sm.ex *= fade; sm.ez *= fade;
   sm.x = o.x; sm.z = o.z; sm.t = now;
   o.x += sm.ex; o.z += sm.ez;
 }
@@ -1244,7 +1251,11 @@ function interpPlayers() {
     if (!pa || !pb) return p;
     // positions come from the buffered moment; health, limbs and death are always the latest
     const o = blendPlayer(pa, pb, k);
-    if (ahead > 0 && !o.dead && !(o.downT > 0)) { o.x += (pb.vx || 0) * ahead; o.z += (pb.vz || 0) * ahead; if (o.state === 'active' || o.state === 'recover') o.st += ahead; }
+    if (ahead > 0 && !o.dead && !(o.downT > 0)) {
+      const glide = COAST * (1 - Math.exp(-ahead / COAST));
+      o.x += (pb.vx || 0) * glide; o.z += (pb.vz || 0) * glide;
+      if (o.state === 'active' || o.state === 'recover' || o.state === 'hold') o.st += ahead;
+    }
     smoothOut(o);
     return { ...o, parts: p.parts, dead: p.dead, deathT: p.dead ? o.deathT : 0, fallYaw: p.dead ? p.fallYaw : o.fallYaw, headless: p.headless, weapon: p.weapon, score: p.score, stam: p.stam, bleed: p.bleed, bruise: p.bruise, color: p.color, name: p.name };
   });
