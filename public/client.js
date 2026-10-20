@@ -987,13 +987,21 @@ function connect(name, room, practice = false) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}${practice ? '&practice=1' : ''}`);
   ws.onopen = () => { connected = true; send({ t: 'ping', c: performance.now() }); };
-  clearInterval(pingTimer); pingTimer = setInterval(() => send({ t: 'ping', c: performance.now() }), 2000); // keep the ping fresh
-  ws.onclose = () => { connected = false; if (!leaving) setTimeout(() => connect(name, room, practice), 1500); };
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.t === 'welcome') { myId = m.id; return; }
+  clearInterval(pingTimer); pingTimer = setInterval(() => sendFast({ t: 'ping', c: performance.now() }), 2000); // keep the ping fresh
+  ws.onclose = () => { connected = false; closeFastLane(); if (!leaving) setTimeout(() => connect(name, room, practice), 1500); };
+  ws.onmessage = (e) => onServerMessage(e.data);
+}
+function onServerMessage(data) {
+  {
+    const m = JSON.parse(data);
+    if (m.t === 'welcome') { myId = m.id; if (m.rtc) openFastLane(); return; }
+    if (m.t === 'rtc-answer') { if (fast.pc) fast.pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => closeFastLane()); return; }
+    if (m.t === 'e') { for (const ev of m.ev) handleEvent(ev); return; }
     if (m.t === 'pong') { pings.push(performance.now() - m.c); if (pings.length > 5) pings.shift(); pred.rtt = [...pings].sort((x, y) => x - y)[pings.length >> 1]; return; }
     if (m.t === 's') {
+      // The fast lane can deliver updates out of order: skip one older than what we have (a big jump
+      // back means the server restarted, so start over from it).
+      if (cur && m.n <= cur.n && m.n > cur.n - 600) return;
       if (curT && performance.now() - curT > 150) netStats.late++;
       prev = cur; prevT = curT; cur = m; curT = performance.now(); netBuffer.push(m, curT);
       const me = m.players.find((p) => p && p.id === myId);
@@ -1006,6 +1014,30 @@ function connect(name, room, practice = false) {
   };
 }
 const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+// The fast lane: a WebRTC data channel to the server that works like UDP, so one lost packet on Wi-Fi
+// is skipped instead of freezing everything behind it (see rtc.js on the server). Updates and movement
+// use it when it's up; everything else, and everything if it can't connect, uses the WebSocket.
+const fast = { pc: null, ch: null, seq: 0 };
+const fastOpen = () => !!fast.ch && fast.ch.readyState === 'open';
+const sendFast = (o) => { if (fastOpen()) { try { fast.ch.send(JSON.stringify(o)); return; } catch {} } send(o); };
+function openFastLane() {
+  closeFastLane();
+  if (!window.RTCPeerConnection || params.has('notrtc')) return;
+  try {
+    const pc = new RTCPeerConnection({ iceServers: [] }), ch = pc.createDataChannel('game', { ordered: false, maxRetransmits: 0 });
+    Object.assign(fast, { pc, ch });
+    ch.onmessage = (e) => onServerMessage(e.data);
+    ch.onclose = () => { if (fast.ch === ch) fast.ch = null; };
+    pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed') closeFastLane(); };
+    // Send the offer once the browser has listed its addresses (or after a second, whatever it has).
+    pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => new Promise((done) => {
+      if (pc.iceGatheringState === 'complete') return done();
+      pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') done(); };
+      setTimeout(done, 1000);
+    })).then(() => { if (fast.pc === pc) send({ t: 'rtc-offer', sdp: pc.localDescription.sdp }); }).catch(() => closeFastLane());
+  } catch { closeFastLane(); }
+}
+function closeFastLane() { try { fast.pc && fast.pc.close(); } catch {} fast.pc = fast.ch = null; }
 
 // ---------- input: Last Oasis-style mouse direction ----------
 // Moving the mouse picks a side (left / right / up) that sticks until you move another way.
@@ -1131,7 +1163,8 @@ function sendInput(dt) {
     j: keys.has('Space'), b: isBlocking(), s: isSprinting(), yaw: Math.round(look.yaw * 1000) / 1000, pitch: Math.round(look.pitch * 1000) / 1000, d: dir,
   };
   const s = JSON.stringify(o), now = performance.now();
-  if ((s !== lastSent && now - lastSentT > 30) || now - lastSentT > 100) { send(o); lastSent = s; lastSentT = now; }
+  // On the fast lane a message can be lost, so repeat it more often; k lets the server drop stale ones.
+  if ((s !== lastSent && now - lastSentT > 30) || now - lastSentT > (fastOpen() ? 50 : 100)) { o.k = ++fast.seq; sendFast(o); lastSent = s; lastSentT = now; }
 }
 
 // ---------- events ----------
@@ -1293,8 +1326,8 @@ function drawHud(players, me, opp) {
   // F3: connection and frame-rate stats, to tell a slow connection from a slow computer or server.
   if (netStats.show) {
     const lines = [`${netStats.fps} fps, slowest frame ${Math.round(netStats.worstShown)} ms`, `ping ${pred.rtt === null ? '?' : Math.round(pred.rtt)} ms, smoothing ${Math.round(netBuffer.delay)} ms`,
-      `late updates ${netStats.late}, server hiccup ${cur && cur.hz != null ? cur.hz : '?'} ms`];
-    lines.forEach((l, i) => text(l, w - 12, h - 92 + i * 18, 13, '#fff', 'right'));
+      `late updates ${netStats.late}, server hiccup ${cur && cur.hz != null ? cur.hz : '?'} ms`, `link: ${fastOpen() ? 'fast lane (WebRTC)' : 'WebSocket only'}`];
+    lines.forEach((l, i) => text(l, w - 12, h - 110 + i * 18, 13, '#fff', 'right'));
   }
   if (S.fps) text(`${perf.fps} fps`, w - 12, 22, 14, perf.fps >= 50 ? '#9be89b' : perf.fps >= 30 ? '#ffd27a' : '#ff8a7a', 'right');
 

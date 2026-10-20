@@ -13,6 +13,9 @@
   <key>Label</key><string>com.goofyduel.server</string>
   <key>ProgramArguments</key>
   <array>
+    <!-- caffeinate keeps the Mac from idle-sleeping while the server runs -->
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
     <string>/opt/homebrew/bin/node</string>
     <string>/Users/YOURNAME/goofy-duel/server.js</string>
   </array>
@@ -23,6 +26,7 @@
   <key>KeepAlive</key><true/>
   <!-- a game server needs steady timing: stop macOS from throttling it in the background -->
   <key>ProcessType</key><string>Interactive</string>
+  <key>LowPriorityIO</key><false/>
   <key>StandardOutPath</key><string>/tmp/goofyduel.log</string>
   <key>StandardErrorPath</key><string>/tmp/goofyduel.log</string>
 </dict>

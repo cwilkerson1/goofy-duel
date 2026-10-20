@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch } from './shared/sim.js';
 import { makeBot, botThink } from './bot.js';
+import { rtcReady, answerOffer } from './rtc.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -153,20 +154,25 @@ server.on('upgrade', (req, socket) => {
   // Strictly 1v1: the first two players fight, everyone after that watches.
   const slot = freeSlot();
   if (slot >= 0) { room.fighters[slot] = me; room.phase = 'waiting'; }
-  ws.send(JSON.stringify({ t: 'welcome', id: me.id, room: room.name, fighter: slot >= 0 }));
+  ws.send(JSON.stringify({ t: 'welcome', id: me.id, room: room.name, fighter: slot >= 0, rtc: rtcReady() }));
   console.log(`[${room.name}] ${name} joined as ${slot >= 0 ? 'fighter' : 'spectator'}`);
 
-  ws.onmessage = (raw) => {
+  ws.onmessage = (raw) => handle(raw, (s) => ws.send(s));
+  // Messages arrive over the WebSocket or the fast lane (rtc.js); reply goes back the way it came.
+  const handle = (raw, reply) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
+    if (m.t === 'rtc-offer' && typeof m.sdp === 'string' && rtcReady() && !ws.rtc) { openFastLane(m.sdp); return; }
     // Connection diagnostics: browsers send at least every 0.1 s, so a long silence is their upload stalling.
     const nowMs = Date.now();
     if (ws.lastMsg && nowMs - ws.lastMsg > 400 && room.phase === 'fight') console.log(`[${room.name}] nothing arrived from ${me.name} for ${nowMs - ws.lastMsg} ms (their connection stalled)`);
     ws.lastMsg = nowMs;
-    if (m.t === 'ping') { ws.send(JSON.stringify({ t: 'pong', c: m.c })); return; }
+    if (m.t === 'ping') { reply(JSON.stringify({ t: 'pong', c: m.c })); return; }
     // Every attack press is numbered, and the number of the last one handled goes back in the updates,
     // so the browser can tell "the server hasn't heard yet" (slow link) from "the server said no".
     if (m.t === 'hold' && Number.isFinite(m.q)) me.ack = m.q;
     if (m.t === 'in') {
+      // The fast lane can deliver out of order: ignore anything older than what we already have.
+      if (Number.isFinite(m.k)) { if (m.k <= (me.inSeq || 0)) return; me.inSeq = m.k; }
       const i = me.input, c = (v) => (Number.isFinite(v) ? Math.max(-1, Math.min(1, v)) : 0);
       i.mf = c(m.mf); i.ms = c(m.ms); i.j = m.j ? 1 : 0; i.b = m.b ? 1 : 0; i.s = m.s ? 1 : 0; i.d = m.d;
       if (Number.isFinite(m.yaw)) i.yaw = m.yaw;
@@ -180,7 +186,19 @@ server.on('upgrade', (req, socket) => {
     else if (m.t === 'rematch') voteRematch(room, me);
     else if (m.t === 'atk') tryAttack(me, m.d);
   };
+  const openFastLane = (sdp) => {
+    ws.rtc = { channel: null };
+    answerOffer(sdp, {
+      onOpen: (ch) => { if (!ws.rtc) return; ws.rtc.channel = ch; console.log(`[${room.name}] ${me.name} is on the fast lane (WebRTC)`); },
+      onMessage: (raw) => handle(raw, (s) => { try { ws.rtc && ws.rtc.channel && ws.rtc.channel.send(s); } catch {} }),
+      onGone: () => { if (ws.rtc && ws.rtc.channel) console.log(`[${room.name}] ${me.name}'s fast lane closed: back to the WebSocket`); if (ws.rtc) ws.rtc.channel = null; },
+    }).then((a) => { if (ws.rtc) { ws.rtc.close = a.close; ws.send(JSON.stringify({ t: 'rtc-answer', sdp: a.sdp })); } })
+      .catch((e) => { console.log(`[${room.name}] couldn't set up the fast lane for ${me.name}: ${e.message}`); ws.rtc = null; });
+  };
+  // Send on the fast lane when it's open; returns false if the WebSocket has to carry it.
+  ws.fast = (s) => { const ch = ws.rtc && ws.rtc.channel; if (!ch || ch.readyState !== 'open') return false; try { ch.send(s); return true; } catch { return false; } };
   ws.onclose = () => {
+    if (ws.rtc && ws.rtc.close) ws.rtc.close(); ws.rtc = null;
     room.clients.delete(ws);
     const k = room.fighters.indexOf(me);
     if (k >= 0) {
@@ -213,14 +231,18 @@ function tick() {
     for (const f of room.fighters) if (f && f.bot) botThink(f, room, TICK);
     stepRoom(room, TICK);
     if (frame % SEND_EVERY) continue;
-    const msg = JSON.stringify({
+    const snap = {
       t: 's', n: frame, phase: room.phase, msg: room.msg, song: room.song, timer: Math.max(0, Math.round(room.timer * 10) / 10),
       players: room.fighters.map((p) => (p ? snapshotPlayer(p) : null)),
       ev: room.events, spectators: room.clients.size - room.fighters.filter(Boolean).length, hz: hiccup,
-    });
+    };
+    const msg = JSON.stringify(snap);
+    // On the fast lane an update can be lost, so events (hits, sounds) go separately over the WebSocket.
+    const ev = room.events.length ? JSON.stringify({ t: 'e', n: frame, ev: room.events }) : null;
+    const fastMsg = JSON.stringify({ ...snap, ev: [] });
     room.events = [];
     for (const c of room.clients) {
-      c.send(msg);
+      if (c.fast && c.fast(fastMsg)) { if (ev) c.send(ev); } else c.send(msg);
       // Updates piling up unsent means this player's download can't keep up (or has stalled).
       const b = c.backlog ? c.backlog() : 0;
       if (b > 20000 && !(c.slowAt > Date.now() - 2000)) { c.slowAt = Date.now(); console.log(`[${room.name}] updates to ${c.me ? c.me.name : 'a player'} are backing up (${Math.round(b / 1024)} KB unsent; their download is stalling)`); }

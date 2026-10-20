@@ -8,7 +8,7 @@ directional combat. Arms, legs and heads come off, and the crowd of monsters lov
 The arena is set on a full-moon night: jack-o'-lanterns on the pillars, tombstones along the wall,
 dead trees, ghosts drifting over the stands, bats overhead, and a wolf howl at the start of each round.
 
-- **Server:** one Node.js file, no `npm install` needed. It runs the fight itself (so nobody can cheat) and serves the game page. The 3D engine (Three.js) is bundled in `public/vendor/`, so it works without internet.
+- **Server:** one Node.js file plus one library (`npm install` once, and again after updates). It runs the fight itself (so nobody can cheat) and serves the game page. The 3D engine (Three.js) is bundled in `public/vendor/`, so it works without internet.
 - **Strictly 1v1:** open the page in any browser on your home network; the first two people with the same arena code fight each other (or practice alone against the computer). Anyone after that watches with a camera circling the fight, and the first watcher steps in if a fighter leaves.
 
 ## Run it on the Mac mini
@@ -16,11 +16,12 @@ dead trees, ghosts drifting over the stands, bats overhead, and a wolf howl at t
 1. Install Node.js 18 or newer if it isn't there yet: `brew install node` (check with `node --version`).
 2. Download the game, either way works:
    - **Terminal:** `git clone https://github.com/cwilkerson1/goofy-duel.git ~/goofy-duel`
-     (to update later: `cd ~/goofy-duel && git pull`)
+     (to update later: `cd ~/goofy-duel && git pull && npm install`)
    - **No git:** on the GitHub page click **Code → Download ZIP**, unzip it, and move the folder to `~/goofy-duel`.
 3. Start it:
    ```bash
    cd ~/goofy-duel
+   npm install          # once: the WebRTC library for the smooth connection (below)
    npm start            # or: PORT=8080 npm start
    ```
 4. The terminal prints the addresses to open, for example:
@@ -43,7 +44,17 @@ To keep it running all the time (and after reboots), have it install the launchd
 `mac/com.goofyduel.server.plist`. The comments at the top of that file say which two paths to edit
 and the two commands to load or stop it. Logs go to `/tmp/goofyduel.log`.
 The launchd file also tells macOS not to throttle the server in the background, which keeps the
-game's timing steady. If you installed it before, copy it over again (editing the two paths) and reload it.
+game's timing steady, and keeps the Mac from idle-sleeping while it runs. If you installed it before,
+copy it over again (editing the two paths) and reload it.
+
+**Smooth connection (WebRTC):** the game talks to each browser two ways. Game updates and movement go
+over a WebRTC data channel that behaves like UDP: on Wi-Fi a lost packet is just skipped, because the next
+update replaces it 33 ms later. Over a plain WebSocket (TCP) a lost packet holds up everything behind it
+until it's resent, which shows up as the opponent freezing and then jumping. Swings, kicks and hits still
+go over the WebSocket, which never loses anything. If the library isn't installed (`npm install`) or the
+channel can't connect, everything uses the WebSocket, as before. **F3** in the game shows which link
+you're on, and the server log says when each player joins the fast lane. If the Mac's firewall is on,
+allow incoming connections for `node` so the channel can connect.
 
 ## How to play
 
@@ -191,6 +202,7 @@ which folder plays when. Kenney's free CC0 "Impact Sounds" and "RPG Audio" packs
 
 ```
 server.js          HTTP + WebSocket server and the 60 Hz game loop
+rtc.js             The WebRTC fast lane: game updates and movement over a UDP-like data channel
 shared/sim.js      Combat rules, body poses, 3D hit detection (used by server and browser)
 shared/predict.js  Moves your own knight instantly in the browser, before the server confirms it
 public/index.html  Start screen
