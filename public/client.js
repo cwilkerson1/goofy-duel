@@ -556,8 +556,74 @@ function updateCrowd(t, dt) {
 }
 
 // ---------- knights ----------
+// ---------- gore textures ----------
+// Where blood collects on armour, cloth and blades: a pattern of splashes, smears and drips. A surface
+// with bloodiness b shows blood wherever the pattern is darker than b, so it spreads as damage builds.
+const BLOOD_MASK = canvasTexture(256, 256, (g, w, h) => {
+  g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+  const blob = (x, y, r, v) => { g.fillStyle = `rgb(${v},${v},${v})`; for (const [dx, dy] of [[0, 0], [w, 0], [-w, 0], [0, h], [0, -h]]) { g.beginPath(); g.arc(x + dx, y + dy, r, 0, 7); g.fill(); } };
+  for (let i = 0; i < 26; i++) { // splashes: a core and satellites, darker (sooner) toward the middle
+    const x = rnd(0, w), y = rnd(0, h), v0 = rnd(20, 230), R = rnd(8, 26);
+    for (let k = 0; k < 14; k++) { const a = rnd(0, 7), d = rnd(0, R * 1.6), r = rnd(1.5, R * 0.5) * (1 - d / (R * 2)); blob(x + Math.cos(a) * d, y + Math.sin(a) * d, Math.max(1, r), Math.min(250, v0 + d * 2)); }
+    for (let k = 0; k < 3; k++) { let dx = x + rnd(-R, R) * 0.5, dy = y; const len = rnd(10, 60); for (let t = 0; t < len; t += 2) blob(dx, dy + t, Math.max(0.8, 2.6 - t / len * 2), Math.min(250, v0 + 30 + t)); } // drips run down
+  }
+});
+// Wet blood on the ground: four splat shapes in a row (a pool, two spatters, a directional streak
+// running toward +x), dark and glossy so torchlight glints off it.
+const SPLATS = (() => {
+  const S = 128, c = document.createElement('canvas'); c.width = S * 4; c.height = S; const g = c.getContext('2d');
+  const drop = (x, y, r, a = 1) => { g.globalAlpha = a; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.globalAlpha = 1; };
+  g.fillStyle = '#fff';
+  // 0: a pool, lumpy round edge
+  for (let k = 0; k < 40; k++) { const a = rnd(0, 7), d = rnd(0, 26); drop(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, rnd(14, 30)); }
+  for (const o of [1, 2]) { // 1, 2: a spatter, a core with satellites flung out around it
+    const ox = o * S + 64;
+    for (let k = 0; k < 10; k++) { const a = rnd(0, 7), d = rnd(0, 12); drop(ox + Math.cos(a) * d, 64 + Math.sin(a) * d, rnd(8, 16)); }
+    for (let k = 0; k < 40; k++) { const a = rnd(0, 7), d = rnd(22, 58); drop(ox + Math.cos(a) * d, 64 + Math.sin(a) * d, rnd(1, 4.5) * (1 - d / 70)); }
+    for (let k = 0; k < 6; k++) { const a = rnd(0, 7); g.save(); g.translate(ox, 64); g.rotate(a); g.beginPath(); g.ellipse(20, 0, rnd(10, 22), rnd(2, 4), 0, 0, 7); g.fill(); g.restore(); }
+  }
+  // 3: hit at speed, travelling toward +x: a teardrop with a tail of droplets ahead of it
+  const ox = 3 * S;
+  g.beginPath(); g.ellipse(ox + 44, 64, 26, 13, 0, 0, 7); g.fill();
+  for (let k = 0; k < 30; k++) { const t = rnd(0, 1); drop(ox + 64 + t * 60, 64 + rnd(-10, 10) * (1 - t * 0.5), rnd(1, 5) * (1 - t * 0.7)); }
+  for (let k = 0; k < 4; k++) { g.beginPath(); g.ellipse(ox + 70 + k * 12, 64 + rnd(-8, 8), 12, 2.2, rnd(-0.15, 0.15), 0, 7); g.fill(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+// The cut face of a severed limb or neck: skin, a thin layer of fat, red muscle in bundles, and the
+// bone in the middle with marrow at its core.
+const CUT_FACE = canvasTexture(128, 128, (g) => {
+  g.fillStyle = '#d9b48a'; g.beginPath(); g.arc(64, 64, 63, 0, 7); g.fill();
+  g.fillStyle = '#e9d27a'; g.beginPath(); g.arc(64, 64, 58, 0, 7); g.fill();
+  g.fillStyle = '#7a0a10'; g.beginPath(); g.arc(64, 64, 54, 0, 7); g.fill();
+  for (let i = 0; i < 260; i++) { const a = rnd(0, 7), d = rnd(14, 52); g.fillStyle = `rgba(${pick([40, 150, 110])},0,${rnd(4, 14) | 0},${rnd(0.25, 0.6)})`; g.beginPath(); g.ellipse(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, rnd(2, 7), rnd(1, 2.5), a, 0, 7); g.fill(); }
+  for (let i = 0; i < 6; i++) { const a = rnd(0, 7); g.strokeStyle = 'rgba(230,200,190,0.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(64 + Math.cos(a) * 18, 64 + Math.sin(a) * 18); g.lineTo(64 + Math.cos(a) * 52, 64 + Math.sin(a) * 52); g.stroke(); } // tissue between muscles
+  g.fillStyle = '#ece2c8'; g.beginPath(); g.arc(66, 62, 15, 0, 7); g.fill();
+  g.fillStyle = '#9a3424'; g.beginPath(); g.arc(66, 62, 7, 0, 7); g.fill();
+});
+CUT_FACE.wrapS = CUT_FACE.wrapT = THREE.ClampToEdgeWrapping;
+// Let a material show blood: material.userData.blood.value (0..1) is how much of it is covered. Blood
+// is dark, wet (shiny, not metallic) and sits in the BLOOD_MASK pattern.
+function bloodable(mat, value = 0) {
+  const u = mat.userData.blood = { value };
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uBlood = u; sh.uniforms.uBloodMask = { value: BLOOD_MASK };
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uBlood; uniform sampler2D uBloodMask;')
+      .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+      float bm = texture2D(uBloodMask, vMapUv * 1.7).r, bk = smoothstep(bm - 0.05, bm + 0.01, uBlood);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.003, 0.006), bk * 0.95);
+      roughnessFactor = mix(roughnessFactor, 0.16, bk); metalnessFactor = mix(metalnessFactor, 0.0, bk * 0.9);`);
+  };
+  mat.customProgramCacheKey = () => 'blood';
+  return mat;
+}
 const UP = new THREE.Vector3(0, 1, 0);
-const GEO = { stump: new THREE.SphereGeometry(0.075, 10, 8) };
+const GEO = { cut: new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2), cutRim: new THREE.TorusGeometry(1, 0.07, 6, 24).rotateX(Math.PI / 2) };
+// A cut end: the cut face with the sheared edge of the armour round it, facing +y, radius r.
+function makeCut(r, plate = MAT.plate) {
+  const g = new THREE.Group(), f = new THREE.Mesh(GEO.cut, MAT.cut), rim = new THREE.Mesh(GEO.cutRim, plate);
+  f.scale.setScalar(r); rim.scale.setScalar(r * 1.04); rim.position.y = -0.004; g.add(f, rim); return g;
+}
+const CUT_R = { head: 0.065, armR: 0.05, armL: 0.05, legR: 0.07, legL: 0.07 };
 const KG = knightGeometry(); // the plate armour pieces, shared by every knight
 // Metal picks up reflections of the night sky and torchlight around it, which is most of what makes it read as metal.
 const SHINE = { envMap: scene.environment, envMapIntensity: 1.1 };
@@ -567,12 +633,12 @@ const MAT = {
   plate: pbrMat(TEX.plate, { metalness: 0.95, color: 0xb4bac2, ...SHINE }),
   slot: new THREE.MeshBasicMaterial({ color: 0x050505 }), grip: pbrMat(TEX.leather), brass: pbrMat(TEX.steel, { metalness: 0.9, color: 0xc8a050, ...SHINE }),
   boot: new THREE.MeshStandardMaterial({ color: 0x2a1e14, roughness: 0.8 }), leather: pbrMat(TEX.leather, { color: 0x8a6a50 }),
-  stump: new THREE.MeshStandardMaterial({ color: 0x8a0f14, roughness: 0.35 }),
+  cut: new THREE.MeshStandardMaterial({ map: CUT_FACE, roughness: 0.3 }),
   gold: pbrMat(TEX.steel, { metalness: 0.95, color: 0xd9b048, ...SHINE }), wood: pbrMat(TEX.grain),
   jewel: new THREE.MeshStandardMaterial({ color: 0x3fa7ff, emissive: 0x1050ff, roughness: 0.1 }),
 };
 // What the weapon models are made of. Each weapon gets its own blade material, so it can glow on a heavy.
-const WMAT = { ...MAT, dark: MAT.darkSteel, blade: (gold) => pbrMat(TEX.steel, gold ? { metalness: 1, color: 0xffe08a, emissive: 0x332200, ...SHINE } : { metalness: 1, color: 0xeef1f4, ...SHINE }) };
+const WMAT = { ...MAT, dark: MAT.darkSteel, blade: (gold) => bloodable(pbrMat(TEX.steel, gold ? { metalness: 1, color: 0xffe08a, emissive: 0x332200, ...SHINE } : { metalness: 1, color: 0xeef1f4, ...SHINE })) };
 const FLAIL_PIVOT = 0.38, FLAIL_CHAIN = 0.45; // where the chain hangs from, and how far the ball sits from there
 // Each weapon is a group whose origin is the grip, pointing up +y along its reach (see models.js).
 // userData.glowMat is the part that glows on a charged heavy.
@@ -599,11 +665,11 @@ function makeFist(knuckles) {
 const plumeMats = {};
 function makeHead(color, dead = false) {
   const g = new THREE.Group(), add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.position.y = -0.03; m.castShadow = true; g.add(m); return m; };
-  add(KG.skull, MAT.plate.clone()); // child 0: the helm shell (takes bruise/damage tint)
+  add(KG.skull, bloodable(MAT.plate.clone(), dead ? 0.55 : 0)); // child 0: the helm shell (bloodies as it takes damage)
   add(KG.visor, MAT.plate); add(KG.slits, MAT.slot); add(KG.aventail, MAT.mail);
   add(KG.plume, plumeMats[color] ??= pbrMat({ normalMap: TEX.cloth.normalMap }, { color, roughness: 0.85, side: THREE.DoubleSide }));
   add(KG.plumeHolder, MAT.brass);
-  if (dead) g.rotation.z = 0.2;
+  if (dead) { g.rotation.z = 0.2; const c = makeCut(CUT_R.head); c.rotation.x = Math.PI; c.position.y = -0.15; g.add(c); } // the neck, from below
   g.userData.mouth = new THREE.Object3D();
   return g;
 }
@@ -649,8 +715,8 @@ class Knight {
     tabardMat.map.wrapS = tabardMat.map.wrapT = THREE.ClampToEdgeWrapping; tabardMat.map.repeat.set(1, 1);
     const mesh = (geo, mat, parent = this.root) => { const x = new THREE.Mesh(geo, mat); x.castShadow = true; parent.add(x); return x; };
     const group = () => { const g = new THREE.Group(); this.root.add(g); return g; };
-    // Each limb's plates get their own material so they can bruise as it takes damage.
-    this.mats = { armR: MAT.plate.clone(), armL: MAT.plate.clone(), legR: MAT.plate.clone(), legL: MAT.plate.clone(), head: null, torso: tabardMat };
+    // Each limb's plates get their own material so blood can spread over it as it takes damage.
+    this.mats = { armR: bloodable(MAT.plate.clone()), armL: bloodable(MAT.plate.clone()), legR: bloodable(MAT.plate.clone()), legL: bloodable(MAT.plate.clone()), head: null, torso: bloodable(tabardMat) };
     this.head = makeHead(TEAM[color]); this.mats.head = this.head.children[0].material; this.head.rotation.order = 'YXZ'; this.root.add(this.head);
     for (const k in this.mats) this.mats[k].userData.base = this.mats[k].color.clone();
     // The body: breastplate, faulds and gorget, with the team tabard and a sword belt over them.
@@ -663,7 +729,8 @@ class Knight {
       mesh(KG.cuisse, m, thigh); mesh(KG.thighMail, MAT.mail, thigh); mesh(KG.sabaton, m, boot); mesh(KG.sole, MAT.boot, boot);
       return { key: 'leg' + s, thigh, knee: mesh(s === 'R' ? KG.poleynR : KG.poleynL, m), shin: mesh(KG.greave, m), boot };
     });
-    this.stumps = [0, 1, 2, 3, 4].map(() => mesh(GEO.stump, MAT.stump));
+    this.stumps = ['head', 'armR', 'armL', 'legR', 'legL'].map((k) => { const c = makeCut(CUT_R[k]); this.root.add(c); return c; });
+    this.cutAt = {}; this.seen = false; this.bladeBlood = 0; this.pooled = false; // gore bookkeeping: when each part came off, how bloody the weapon is
     this.weaponId = 'longsword'; this.sword = makeWeapon(this.weaponId); this.root.add(this.sword);
     this.offFist = makeFist(MAT.darkSteel); this.offFist.visible = false; this.root.add(this.offFist); // the non-punching hand, when boxing
     // A faint streak behind the weapon's head as it's drawn back and swung, so you can see which way it's moving.
@@ -697,10 +764,10 @@ class Knight {
   }
   update(p, sk, firstPerson) {
     const cut = (k) => p.parts[k].cut;
-    // Bruising: damaged parts go purple, and blunt-weapon bruising darkens the body too.
+    // Damage shows as blood spreading over that part's armour, and blunt-weapon bruising darkens the body too.
     for (const [k, mat] of Object.entries(this.mats)) {
       const hurt = Math.min(1, 1 - p.parts[k].hp / PART_MAX[k] + (k === 'torso' ? (p.bruise || 0) * 0.15 : 0));
-      mat.color.copy(mat.userData.base).lerp(BRUISE, hurt * 0.75);
+      mat.userData.blood.value = cut(k) ? 0.8 : hurt * 0.85; mat.color.copy(mat.userData.base).lerp(BRUISE, hurt * 0.2);
     }
     // Falling down (knocked over, or dead weight) is already in the skeleton; tq turns the pieces
     // that are placed by facing (head, boots, the way plates face) along with the body.
@@ -753,11 +820,29 @@ class Knight {
       L.knee.position.copy(P[kn]); L.knee.quaternion.copy(L.shin.quaternion);
       L.boot.position.copy(P[ft]); L.boot.quaternion.setFromAxisAngle(UP, p.yaw).premultiply(tq);
     });
-    [['head', P.neck], ['armR', P.shR], ['armL', P.shL], ['legR', P.hipR], ['legL', P.hipL]].forEach(([k, pos], i) => {
-      const s = this.stumps[i]; s.visible = cut(k) && !(firstPerson && (k === 'head' || k.startsWith('leg'))); if (!s.visible) return;
-      s.position.copy(pos);
-      if (Math.random() < (p.dead ? 0.15 : 0.5)) blood.spawn(pos.clone().applyQuaternion(this.root.quaternion).add(this.root.position), new THREE.Vector3(rnd(-0.6, 0.6), rnd(0.8, 2.4), rnd(-0.6, 0.6)));
+    // Cut ends, and the blood pumping from them: in spurts with each heartbeat, strong when fresh, easing
+    // off over a few seconds, and only oozing once the heart has stopped.
+    const now = performance.now() / 1000, dt = Math.min(0.05, now - (this.lastT || now)); this.lastT = now;
+    const ends = { head: [P.neck, up], armR: [P.shR, right.clone().addScaledVector(upT, -0.5).normalize()], armL: [P.shL, right.clone().negate().addScaledVector(upT, -0.5).normalize()],
+      legR: [P.hipR, upT.clone().negate()], legL: [P.hipL, upT.clone().negate()] };
+    ['head', 'armR', 'armL', 'legR', 'legL'].forEach((k, i) => {
+      const c = this.stumps[i];
+      if (!cut(k)) { c.visible = false; delete this.cutAt[k]; return; }
+      if (this.cutAt[k] === undefined) this.cutAt[k] = this.seen ? now : now - 60; // already off when we first saw them: old wounds
+      const [pos, n] = ends[k];
+      c.visible = !(firstPerson && (k === 'head' || k.startsWith('leg')));
+      c.position.copy(pos).addScaledVector(n, k === 'head' ? 0.02 : 0.01); c.quaternion.setFromUnitVectors(UP, n);
+      const age = now - this.cutAt[k], beat = Math.max(0, Math.sin(now * 8.5 + i)) ** 3;
+      const flow = p.dead ? 0.25 * Math.exp(-age / 6) : Math.exp(-age / 5) * (k === 'head' ? 1.4 : 1) + 0.08;
+      for (let e = 0, n0 = flow * (10 + 90 * beat) * dt; e < n0 || Math.random() < n0 - e; e++) {
+        const sp = (1.2 + 3.2 * beat) * Math.min(1.2, flow + 0.2);
+        blood.spawn(pos, n.clone().multiplyScalar(sp).add(new THREE.Vector3(rnd(-0.5, 0.5), rnd(-0.2, 0.5), rnd(-0.5, 0.5))), rnd(0.008, 0.02));
+      }
     });
+    // A dead body bleeds out into a pool beneath it.
+    if (p.dead && !this.pooled && (p.deathT || 0) > 0.6) { this.pooled = true; blood.pool(P.hip.x, P.hip.z, 0.55 + 0.12 * Object.keys(this.cutAt).length); }
+    if (!p.dead) this.pooled = false;
+    this.seen = true;
     this.head.visible = !firstPerson && !cut('head');
     if (this.head.visible) {
       this.head.position.copy(P.head);
@@ -765,7 +850,7 @@ class Knight {
       this.head.userData.mouth.scale.setScalar(p.state === 'active' || p.stun > 0 ? 1.8 : 1);
     }
     if (p.weapon && p.weapon !== this.weaponId) {
-      this.root.remove(this.sword); this.weaponId = p.weapon; this.sword = makeWeapon(p.weapon); this.root.add(this.sword);
+      this.root.remove(this.sword); this.weaponId = p.weapon; this.sword = makeWeapon(p.weapon); this.root.add(this.sword); this.bladeBlood = 0;
     }
     this.sword.visible = !!sk.tip && !wheel.hiding();
     if (sk.tip) {
@@ -779,6 +864,9 @@ class Knight {
       if (isHeavy(p)) em.set(0xffffff);
       else em.copy(this.sword.userData.baseEmissive);
       if (this.sword.userData.chain) this.swingChain();
+      // Blood on the weapon from the hits it's landed, dripping off the end now and then.
+      const gm = this.sword.userData.glowMat; if (gm.userData.blood) gm.userData.blood.value = this.bladeBlood;
+      if (this.bladeBlood > 0.25 && Math.random() < this.bladeBlood * 0.08) blood.spawn(V(sk.tip), new THREE.Vector3(0, -0.2, 0), rnd(0.006, 0.012));
     }
     this.updateTrail(p, sk, !firstPerson && !wheel.hiding());
   }
@@ -823,51 +911,103 @@ const BRUISE = new THREE.Color(0x3a0c10); // battered: dark, bloodied
 
 // ---------- blood, decals and flying limbs ----------
 const blood = (() => {
-  const MAX = 3000, pos = new Float32Array(MAX * 3).fill(-99), vel = new Float32Array(MAX * 3), life = new Float32Array(MAX);
-  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const dot = canvasTexture(32, 32, (g) => { g.fillStyle = '#fff'; g.beginPath(); g.arc(16, 16, 14, 0, 7); g.fill(); });
-  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xc0141f, size: 0.035, map: dot, alphaTest: 0.5 }));
-  pts.frustumCulled = false; scene.add(pts);
-  const DMAX = 600, decals = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8a0f0f, transparent: true, opacity: 0.85, depthWrite: false }), DMAX);
-  decals.count = 0; decals.frustumCulled = false; scene.add(decals);
-  let next = 0, dnext = 0;
+  // Drops are little quads that face the camera and stretch along the way they're flying, so fast
+  // ones read as streaks; mist is a few big, faint, slow puffs. Drops that land leave splats.
+  const MAX = 4000, pos = new Float32Array(MAX * 3).fill(-99), vel = new Float32Array(MAX * 3), life = new Float32Array(MAX);
+  const size = new Float32Array(MAX), alpha = new Float32Array(MAX), mist = new Uint8Array(MAX);
+  const quad = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry();
+  geo.index = quad.index; geo.setAttribute('position', quad.attributes.position); geo.setAttribute('uv', quad.attributes.uv);
+  const attr = (arr, n) => { const a = new THREE.InstancedBufferAttribute(arr, n); a.setUsage(THREE.DynamicDrawUsage); return a; };
+  geo.setAttribute('iPos', attr(pos, 3)); geo.setAttribute('iVel', attr(vel, 3)); geo.setAttribute('iSize', attr(size, 1)); geo.setAttribute('iAlpha', attr(alpha, 1));
+  geo.instanceCount = MAX;
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: `attribute vec3 iPos; attribute vec3 iVel; attribute float iSize; attribute float iAlpha; varying vec2 vUv; varying float vA; varying float vSoft;
+      void main() {
+        vec4 c = viewMatrix * vec4(iPos, 1.0); vec2 d = (viewMatrix * vec4(iVel, 0.0)).xy; float sp = length(d);
+        vec2 dir = vec2(0.0, 1.0); if (sp > 1e-4) dir = d / sp;
+        vec2 side = vec2(dir.y, -dir.x); // keeps the quad facing the camera (the other way round it'd be culled)
+        float stretch = 1.0 + min(sp * 0.02 / max(iSize, 1e-4), 3.5);
+        c.xy += side * position.x * iSize + dir * position.y * iSize * stretch;
+        gl_Position = projectionMatrix * c; vUv = uv; vA = iAlpha; vSoft = clamp((iSize - 0.04) * 12.0, 0.0, 1.0);
+      }`,
+    fragmentShader: `varying vec2 vUv; varying float vA; varying float vSoft;
+      void main() {
+        vec2 q = vUv * 2.0 - 1.0; float r = length(q); if (r > 1.0) discard;
+        float a = vA * mix(1.0 - smoothstep(0.7, 1.0, r), (1.0 - r) * (1.0 - r), vSoft);
+        vec3 col = mix(vec3(0.36, 0.006, 0.014), vec3(0.16, 0.0, 0.005), r) + vec3(0.25, 0.08, 0.08) * (1.0 - smoothstep(0.0, 0.35, length(q - vec2(-0.3, 0.35)))) * (1.0 - vSoft);
+        gl_FragColor = vec4(col, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+  const drops = new THREE.Mesh(geo, mat); drops.frustumCulled = false; drops.renderOrder = 2; scene.add(drops);
+  // Splats on the ground: one instanced mesh per splat shape. Wet blood is glossy.
+  const DMAX = 400, splatMat = (k) => { const t = SPLATS.clone(); t.repeat.set(0.25, 1); t.offset.set(k * 0.25, 0); t.needsUpdate = true;
+    return new THREE.MeshStandardMaterial({ map: t, color: 0x8a0610, emissive: 0x3a0006, emissiveMap: t, roughness: 0.12, metalness: 0, transparent: true, alphaTest: 0.05, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, envMap: scene.environment, envMapIntensity: 0.8 }); };
+  const flat = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const kinds = [0, 1, 2, 3].map((k) => { const m = new THREE.InstancedMesh(flat, splatMat(k), DMAX); m.count = 0; m.frustumCulled = false; m.receiveShadow = true; scene.add(m); return { m, next: 0 }; });
+  const pools = []; // growing pools under bodies: { x, z, s, max, i }
+  const _s = new THREE.Vector3();
+  let next = 0, layer = 0;
+  const put = (kind, x, z, s, ang, elong) => {
+    const K = kinds[kind], d = K.next; K.next = (K.next + 1) % DMAX;
+    _m.compose(_p.set(x, 0.004 + (layer = (layer + 1) % 400) * 1e-5, z), _q.setFromAxisAngle(UP, ang), _s.set(s * elong, 1, s));
+    K.m.setMatrixAt(d, _m); K.m.count = Math.max(K.m.count, d + 1); K.m.instanceMatrix.needsUpdate = true; return d;
+  };
   return {
-    spawn(p, v) { const i = next = (next + 1) % MAX; pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z; vel[i * 3] = v.x; vel[i * 3 + 1] = v.y; vel[i * 3 + 2] = v.z; life[i] = rnd(0.8, 1.6); },
+    spawn(p, v, s = rnd(0.008, 0.022), isMist = false) {
+      const i = next = (next + 1) % MAX;
+      pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z; vel[i * 3] = v.x; vel[i * 3 + 1] = v.y; vel[i * 3 + 2] = v.z;
+      life[i] = isMist ? rnd(0.35, 0.7) : rnd(0.9, 1.8); size[i] = s; alpha[i] = isMist ? 0.28 : 0.97; mist[i] = isMist ? 1 : 0;
+    },
+    // A hit: most of the blood flies on in the direction of the blow, a cone of drops big and small,
+    // with a red mist hanging where it landed.
     burst(p, n, dir, power = 1) {
-      for (let k = 0; k < n; k++) this.spawn(p, new THREE.Vector3(dir.x * rnd(0.5, 3) * power + rnd(-1.5, 1.5), rnd(0.5, 4) * power, dir.z * rnd(0.5, 3) * power + rnd(-1.5, 1.5)));
+      const d = new THREE.Vector3(dir.x, 0, dir.z); if (d.lengthSq() < 1e-4) d.set(rnd(-1, 1), 0, rnd(-1, 1)); d.normalize();
+      for (let k = 0; k < n; k++) {
+        const sp = rnd(1, 4.5) * power, big = Math.random() < 0.15;
+        this.spawn(p, new THREE.Vector3(d.x * sp + rnd(-1.3, 1.3), rnd(0.3, 3.2) * power, d.z * sp + rnd(-1.3, 1.3)), big ? rnd(0.022, 0.035) : rnd(0.006, 0.018));
+      }
+      for (let k = 0; k < Math.ceil(n / 8); k++) this.spawn(p, new THREE.Vector3(d.x * rnd(0.3, 1.2) + rnd(-0.3, 0.3), rnd(0, 0.6), d.z * rnd(0.3, 1.2) + rnd(-0.3, 0.3)), rnd(0.07, 0.14), true);
     },
-    decal(x, z, s) {
-      const d = dnext; dnext = (dnext + 1) % DMAX;
-      _m.compose(_p.set(x, 0.004 + d * 2e-6, z), _q.identity(), new THREE.Vector3(s, 1, s * rnd(0.6, 1)));
-      decals.setMatrixAt(d, _m); decals.count = Math.max(decals.count, d + 1); decals.instanceMatrix.needsUpdate = true;
-    },
-    clearDecals() { decals.count = 0; dnext = 0; },
+    decal(x, z, s, ang = rnd(0, 7), elong = 1) { put(elong > 1.4 ? 3 : 1 + (Math.random() < 0.5 ? 1 : 0), x, z, s * 2, ang, elong); },
+    pool(x, z, max) { pools.push({ x, z, s: 0.05, max, i: put(0, x, z, 0.05, rnd(0, 7), 1) }); },
+    clearDecals() { for (const K of kinds) { K.m.count = 0; K.next = 0; } pools.length = 0; },
     step(dt) {
       for (let i = 0; i < MAX; i++) {
         if (life[i] <= 0) continue;
-        life[i] -= dt; vel[i * 3 + 1] -= 14 * dt;
+        life[i] -= dt;
+        if (mist[i]) { const k = Math.exp(-3 * dt); vel[i * 3] *= k; vel[i * 3 + 2] *= k; vel[i * 3 + 1] = vel[i * 3 + 1] * k - 0.6 * dt; alpha[i] = Math.max(0, alpha[i] - dt * 0.45); size[i] += dt * 0.12; }
+        else vel[i * 3 + 1] -= 14 * dt;
         pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
         if (pos[i * 3 + 1] <= 0 || life[i] <= 0) {
-          if (pos[i * 3 + 1] <= 0 && Math.random() < 0.35) this.decal(pos[i * 3], pos[i * 3 + 2], rnd(0.03, 0.12));
-          life[i] = 0; pos[i * 3 + 1] = -99;
+          // A drop that lands splats: bigger drops make bigger splats, fast ones smear along the way they were going.
+          if (!mist[i] && pos[i * 3 + 1] <= 0 && Math.random() < 0.55) { const h = Math.hypot(vel[i * 3], vel[i * 3 + 2]); this.decal(pos[i * 3], pos[i * 3 + 2], size[i] * rnd(3, 5.5), Math.atan2(-vel[i * 3 + 2], vel[i * 3]), 1 + Math.min(1.3, h * 0.3)); }
+          life[i] = 0; pos[i * 3 + 1] = -99; size[i] = 0; alpha[i] = 0;
         }
       }
-      geo.attributes.position.needsUpdate = true;
+      for (const a of ['iPos', 'iVel', 'iSize', 'iAlpha']) geo.attributes[a].needsUpdate = true;
+      for (const P of pools) if (P.s < P.max) {
+        P.s = Math.min(P.max, P.s + dt * 0.12 * (1 - P.s / P.max + 0.15));
+        _m.compose(_p.set(P.x, 0.0035, P.z), _q.setFromAxisAngle(UP, P.i), _s.set(P.s * 2, 1, P.s * 1.7)); kinds[0].m.setMatrixAt(P.i, _m); kinds[0].m.instanceMatrix.needsUpdate = true;
+      }
     },
   };
 })();
 
 const gibs = [];
+const GORE_PLATE = bloodable(MAT.plate.clone(), 0.6); // a severed limb's armour, blood-soaked
 function spawnGib(ev) {
   const g = new THREE.Group(), kind = ev.part === 'head' ? 'head' : ev.part.startsWith('arm') ? 'arm' : 'leg';
   let radius = 0.08;
   if (kind === 'head') { g.add(makeHead(TEAM[ev.color], true)); radius = HEAD_R; g.rotation.y = ev.yaw; }
   else {
     // The limb's plates laid end to end, hanging down from the cut.
-    const arm = kind === 'arm', len = arm ? ARM : LEG, piece = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = Math.PI; m.position.y = y; m.castShadow = true; g.add(m); return m; };
-    if (arm) { piece(KG.upperArm, MAT.plate, len / 2); piece(KG.forearm, MAT.plate, len / 2 - UPPER_ARM); piece(KG.gauntlet, MAT.plate, -len / 2); }
-    else { piece(KG.cuisse, MAT.plate, len / 2); piece(KG.thighMail, MAT.mail, len / 2); piece(KG.greave, MAT.plate, len / 2 - THIGH); const b = piece(KG.sabaton, MAT.plate, -len / 2); b.rotation.x = 0; piece(KG.sole, MAT.boot, -len / 2).rotation.x = 0; }
-    const st = new THREE.Mesh(GEO.stump, MAT.stump); st.position.y = len / 2; g.add(st);
+    const arm = kind === 'arm', len = arm ? ARM : LEG, gore = GORE_PLATE, piece = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = Math.PI; m.position.y = y; m.castShadow = true; g.add(m); return m; };
+    if (arm) { piece(KG.upperArm, gore, len / 2); piece(KG.forearm, gore, len / 2 - UPPER_ARM); piece(KG.gauntlet, gore, -len / 2); }
+    else { piece(KG.cuisse, gore, len / 2); piece(KG.thighMail, MAT.mail, len / 2); piece(KG.greave, gore, len / 2 - THIGH); const b = piece(KG.sabaton, gore, -len / 2); b.rotation.x = 0; piece(KG.sole, MAT.boot, -len / 2).rotation.x = 0; }
+    const c = makeCut(arm ? CUT_R.armR : CUT_R.legR, gore); c.position.y = len / 2 + 0.005; g.add(c); // the cut end
     if (ev.sword) { const s = makeWeapon(ev.weapon); s.position.y = -len / 2; s.rotation.z = Math.PI / 2; g.add(s); }
   }
   g.position.copy(V(ev.pos)); scene.add(g);
@@ -883,7 +1023,7 @@ function stepGibs(dt) {
     b.g.position.addScaledVector(b.vel, dt);
     const w = b.spin.length();
     if (w > 0.01) b.g.quaternion.premultiply(_q.setFromAxisAngle(_d.copy(b.spin).divideScalar(w), w * dt));
-    if (b.life < 1.6 && Math.random() < 0.8) blood.spawn(b.g.position, new THREE.Vector3(rnd(-0.5, 0.5), rnd(0, 1.5), rnd(-0.5, 0.5)));
+    if (b.life < 2.5 && Math.random() < 0.9 * (1 - b.life / 2.5)) blood.spawn(b.g.position, new THREE.Vector3(rnd(-0.6, 0.6), rnd(0, 1.5), rnd(-0.6, 0.6)));
     if (b.g.position.y < b.radius) {
       b.g.position.y = b.radius;
       if (Math.abs(b.vel.y) > 1.5) { audio.boing(2.4, 0.04); blood.decal(b.g.position.x, b.g.position.z, 0.2); }
@@ -1179,7 +1319,8 @@ function handleEvent(ev) {
     case 'hit':
       // No pop-up numbers or words: how good a hit was shows in the blood, the sound and the shake.
       // A sweet-spot hit sprays more and lands with a heavy thud; a handle or shaft hit barely bleeds.
-      blood.burst(V(ev.pos), ev.zm >= 1.25 ? 45 : ev.zm < 0.6 ? 8 : 22, new THREE.Vector3(ev.dir[0], 0, ev.dir[1]), ev.zm >= 1.25 ? 1.3 : 1);
+      blood.burst(V(ev.pos), ev.zm >= 1.25 ? 70 : ev.zm < 0.6 ? 12 : 35, new THREE.Vector3(ev.dir[0], 0, ev.dir[1]), ev.zm >= 1.25 ? 1.3 : 1);
+      { const k = knights.get(ev.by); if (k && ev.weapon !== 'fists') k.bladeBlood = Math.min(0.9, k.bladeBlood + (ev.zm < 0.6 ? 0.06 : 0.18)); }
       audio.hitFor(ev.weapon); if (ev.zm >= 1.25) audio.thud();
       if (Math.random() < 0.6) sfx.play('grunt', 0.5, 1, 0.05); // the one who got hit, if there are recordings of grunts
       if (mine) { shake = ev.zm >= 1.25 ? 0.1 : 0.06; hurtFlash = ev.zm >= 1.25 ? 0.7 : 0.5; }
@@ -1187,7 +1328,8 @@ function handleEvent(ev) {
       break;
     case 'sever': {
       const gib = spawnGib(ev); if (mine && ev.part === 'head') myHeadGib = gib;
-      blood.burst(V(ev.pos), 70, V(ev.vel).normalize(), 1.4); audio.squelch(); audio.cheer();
+      blood.burst(V(ev.pos), 110, V(ev.vel).normalize(), 1.4); audio.squelch(); audio.cheer();
+      { const k = knights.get(ev.by); if (k) k.bladeBlood = Math.min(0.95, k.bladeBlood + 0.3); }
       crowd.cheer = 1;
       if (mine) { shake = 0.12; hurtFlash = 1; }
       break;
@@ -1207,7 +1349,7 @@ function handleEvent(ev) {
     case 'jump': if (mine) audio.boing(1); break;
     case 'hop': audio.boing(1.6, mine ? 0.12 : 0.06); break;
     case 'roundEnd': audio.cheer(); crowd.cheer = 1; break;
-    case 'round': audio.howl(); clearGibs(); blood.clearDecals(); myHeadGib = null; break;
+    case 'round': audio.howl(); clearGibs(); blood.clearDecals(); myHeadGib = null; for (const k of knights.values()) k.bladeBlood = 0; break;
     case 'spin': wheel.start(ev); break;
   }
 }
@@ -1773,4 +1915,4 @@ function showGallery() {
   return Object.fromEntries(Object.entries(at).map(([k, [x, y]]) => [k, [x, y, 6]]));
 }
 let debugCam = null, debugPose = null;
-if (params.has('debug')) window.duel = { renderer, gallery: showGallery, set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get view() { return lastView; }, get pred() { return pred; }, get net() { return netBuffer; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+if (params.has('debug')) window.duel = { renderer, gallery: showGallery, blood, knights, set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get view() { return lastView; }, get pred() { return pred; }, get net() { return netBuffer; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
