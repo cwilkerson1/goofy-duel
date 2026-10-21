@@ -1267,12 +1267,12 @@ function predictMyAction(p, now) {
   if (!s || s.dead || p.dead) { swingIntent = null; return p; }
   const age = Math.max(0, Math.min(0.1, (now - curT) / 1000)); // now is the frame's start, which can be before the update arrived
   const o = { ...p, state: s.state, st: s.st + age, sdir: s.sdir, heavy: s.heavy, saim: s.saim, recDur: s.recDur,
-    blocking: s.blocking, gdir: s.gdir, stun: Math.max(0, s.stun - age), riposte: s.riposte };
+    blocking: s.blocking, gdir: s.gdir, stun: Math.max(0, s.stun - age) };
   const free = o.stun <= 0 && !(p.downT > 0), I = swingIntent, wait = Math.max(250, (pred.rtt ?? 100) * 1.5 + 80);
   if (I) {
     if (!atkHeld && I.relT === null) Object.assign(I, { relT: now, aim: look.pitch * 180 / Math.PI }); // the side was locked at the click
     if (!isBlocking()) I.b = false;
-    const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
+    const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + tm(o, 'DRAW') * 1000);
     if (I.q && (s.state === 'active' || s.state === 'recover')) {
       // Still finishing the last swing: the new wind-up starts when the combo window opens (or at the end).
       const left = s.state === 'active' ? tm(o, 'ACTIVE') - (s.st + age) + s.recDur * T.COMBO_AT : (s.comboOk ? s.recDur * T.COMBO_AT : s.recDur) - (s.st + age);
@@ -1287,7 +1287,7 @@ function predictMyAction(p, now) {
     else if (now - go > tm(o, 'ACTIVE') * 1000 + wait) swingIntent = null;
   }
   if (swingIntent && !(I.q && (s.state === 'active' || s.state === 'recover') && now < I.pressT)) {
-    const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
+    const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + tm(o, 'DRAW') * 1000);
     if (now < go) Object.assign(o, { state: 'hold', st: (now - I.pressT) / 1000, sdir: I.dir, heavy: false, blocking: false });
     else Object.assign(o, { state: 'active', st: (now - go) / 1000, sdir: I.dir, saim: I.aim, heavy: (go - I.pressT) / 1000 >= tm(o, 'HEAVY_AT'), blocking: false });
   } else if (now - feintAt < wait && (o.state === 'hold' || (o.state === 'active' && s.st < tm(o, 'ACTIVE') * T.FEINT_IN))) Object.assign(o, { state: 'idle', st: 0, heavy: false });
@@ -1486,7 +1486,6 @@ function drawHud(players, me, opp) {
     // Plain crosshair: your chosen direction is deliberately invisible, like Last Oasis.
     const cx = w / 2, cy = h / 2;
     hctx.beginPath(); hctx.arc(cx, cy, 2.5, 0, Math.PI * 2); hctx.fillStyle = '#ffffffc0'; hctx.fill();
-    if (me.riposte) text('RIPOSTE! swing now', cx, cy - 70, 16, '#3fe0ff');
     // Your chosen side, for your eyes only: a small mark left, right or above the crosshair. Your
     // opponent still has to read it from your weapon.
     if (!me.dead) {
@@ -1520,8 +1519,8 @@ function drawHud(players, me, opp) {
       bodyChart(w - 300, 108, opp);
     }
 
-    // Blocking a heavy still staggers you briefly (riposte is ready once it wears off); anything else is a real stun.
-    if (me.stun > 0) text(me.riposte ? 'Heavy blow! Guard staggered' : '💫 STUNNED 💫', w / 2, h / 2 + 115, me.riposte ? 20 : 26, '#ffd23f');
+    // Blocking a heavy still staggers you briefly; anything else is a real stun.
+    if (me.stun > 0) text(me.staggered ? 'Heavy blow! Guard staggered' : '💫 STUNNED 💫', w / 2, h / 2 + 115, me.staggered ? 20 : 26, '#ffd23f');
     if (me.dead) text(me.headless ? "You've lost your head!" : 'You have been slain.', w / 2, h / 2 + 140, 30, '#ff6b6b');
   } else if (cur.players.some(Boolean)) text('Spectating', w / 2, 90, 18);
 

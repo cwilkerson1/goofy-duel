@@ -25,7 +25,6 @@ export const DMG_SCALE = 0.55, HEAD_CAP = 0.6;
 
 export const T = {
   DRAW: 0.28,        // minimum time the weapon is drawn back before a release swings
-  RIPOSTE_DRAW: 0.1, // draw time right after a successful block
   HEAVY_AT: 0.43,    // hold this long and the attack becomes heavy (scaled by the weapon's wind-up speed)
   MAX_HOLD: 2.5,     // auto-release after this
   ACTIVE: 0.18, RECOVER: 0.32, BOUNCE: 0.5,
@@ -436,7 +435,7 @@ export function newPlayer(id, name) {
   return {
     id, name, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, onGround: true,
     weapon: 'longsword', parts: newParts(), gdir: 'right', state: 'idle', sdir: 'right', st: 0, saim: 0, recDur: T.RECOVER,
-    release: false, heavy: false, hitDone: false, blocking: false, stun: 0, flinch: 0, cd: 0, riposte: 0,
+    release: false, heavy: false, hitDone: false, blocking: false, stun: 0, flinch: 0, cd: 0, staggered: false,
     stam: STAM_MAX, stamWait: 0, dead: false, deathT: 0, headless: false,
     walk: 0, bleed: 0, score: 0, color: 0, input: { mf: 0, ms: 0, j: 0, b: 0, s: 0 }, prevB: 0,
   };
@@ -446,7 +445,7 @@ export function resetFighter(p, side) {
   Object.assign(p, {
     x: 0, y: 0, z: side === 0 ? 4 : -4, vx: 0, vy: 0, vz: 0, yaw: side === 0 ? 0 : Math.PI, pitch: 0, onGround: true,
     parts: newParts(), state: 'idle', st: 0, release: false, heavy: false, hitDone: false, blocking: false,
-    stun: 0, flinch: 0, cd: 0, riposte: 0, stam: STAM_MAX, stamWait: 0,
+    stun: 0, flinch: 0, cd: 0, staggered: false, stam: STAM_MAX, stamWait: 0,
     dead: false, deathT: 0, downT: 0, fallYaw: 0, headless: false, bleed: 0, wounds: 0, bruise: 0, bruiseAche: 0, color: side, panic: undefined, queued: null,
   });
   p.input.yaw = p.yaw; p.input.pitch = 0;
@@ -519,7 +518,7 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
   if (BLUNT.has(att.weapon)) { const b = amount * BRUISE.perDamage; def.bruise = (def.bruise || 0) + b; def.bruiseAche = (def.bruiseAche || 0) + b * BRUISE.linger; }
   def.vx += fa[0] * 2.2 * W.knock; def.vz += fa[2] * 2.2 * W.knock;
   if (W.knock >= 2.5) { def.vy = Math.max(def.vy, W.knock * 0.9); def.onGround = false; } // yeet
-  if (W.stun) def.stun = Math.max(def.stun, W.stun * (att.heavy ? 1.5 : 1));
+  if (W.stun) { def.stun = Math.max(def.stun, W.stun * (att.heavy ? 1.5 : 1)); def.staggered = false; }
   interrupt(def, 0.35);
   if (part.hp > 0) return;
   // Punches can't tear anything off: a battered limb stays on, and a final blow to the head is a knockout.
@@ -547,8 +546,8 @@ function stepPlayer(room, p, dt) {
     // Dead weight: the body just slides to a stop where it fell.
     const k = Math.pow(0.002, dt); p.vx *= k; p.vz *= k;
   } else {
-    p.st += dt; p.cd = Math.max(0, p.cd - dt); p.flinch = Math.max(0, p.flinch - dt); p.riposte = Math.max(0, p.riposte - dt);
-    if (p.stun > 0) p.stun = Math.max(0, p.stun - dt);
+    p.st += dt; p.cd = Math.max(0, p.cd - dt); p.flinch = Math.max(0, p.flinch - dt);
+    if (p.stun > 0) { p.stun = Math.max(0, p.stun - dt); if (p.stun === 0) p.staggered = false; }
     if (p.downT > 0) { p.downT += dt; if (p.downT >= DOWN.fall + DOWN.lie + DOWN.rise) p.downT = 0; }
     const blockPressed = p.input.b && !p.prevB;
     p.prevB = p.input.b;
@@ -556,10 +555,9 @@ function stepPlayer(room, p, dt) {
     else if (p.state === 'hold') {
       // The side is locked in when the attack starts (startHold); to change it, feint and attack again.
       if (p.st >= T.MAX_HOLD) p.release = true;
-      const draw = p.riposte > 0 ? T.RIPOSTE_DRAW : tm(p, 'DRAW');
-      if (p.release && p.st >= draw) {
+      if (p.release && p.st >= tm(p, 'DRAW')) {
         p.heavy = p.st >= tm(p, 'HEAVY_AT'); p.saim = p.pitch / D2R;
-        p.state = 'active'; p.st = 0; p.hitDone = false; p.riposte = 0;
+        p.state = 'active'; p.st = 0; p.hitDone = false;
         spend(p, (p.heavy ? COST.heavy : COST.swing) * wpn(p).stam);
         room.events.push({ t: 'swing', id: p.id, dir: p.sdir, heavy: p.heavy });
       }
@@ -672,13 +670,12 @@ function resolveSwing(room, att, def) {
       spend(def, cost);
       att.state = 'recover'; att.st = 0; att.recDur = tm(att, 'BOUNCE');
       const fa = forward(att.yaw); att.vx -= fa[0] * 2; att.vz -= fa[2] * 2;
-      def.riposte = 0.7; // the blocker gets a faster swing back
-      if (att.heavy) def.stun = 0.45; // heavies stagger even when blocked
+      if (att.heavy) { def.stun = 0.45; def.staggered = true; } // heavies stagger even when blocked
       room.events.push({ t: 'parry', id: def.id, by: att.id, pos: ska.tip || ska.head, heavy: att.heavy });
       return;
     }
     // Not enough stamina: the guard breaks and the hit goes through, softened.
-    def.stam = 0; def.stun = 0.8; mul = 0.6;
+    def.stam = 0; def.stun = 0.8; def.staggered = false; mul = 0.6;
     room.events.push({ t: 'guardbreak', id: def.id });
   } else if (def.blocking && faces) room.events.push({ t: 'wrongblock', id: def.id });
 
@@ -767,7 +764,7 @@ export function snapshotPlayer(p) {
   return {
     id: p.id, name: p.name, x: r3(p.x), y: r3(p.y), z: r3(p.z), vx: r2(p.vx), vy: r2(p.vy), vz: r2(p.vz), yaw: r3(p.yaw), pitch: r2(p.pitch),
     onGround: p.onGround, gdir: p.gdir, state: p.state, sdir: p.sdir, st: r3(p.st), saim: Math.round(p.saim), recDur: p.recDur,
-    heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), riposte: p.riposte > 0, stam: Math.round(p.stam),
+    heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), staggered: p.stun > 0 && p.staggered, stam: Math.round(p.stam),
     ack: p.ack || 0, queued: !!p.queued,
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
     weapon: p.weapon, walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
