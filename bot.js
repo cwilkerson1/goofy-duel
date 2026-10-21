@@ -64,7 +64,7 @@ export function botThink(me, room, dt) {
 
   // Kick a turtle: someone close who keeps blocking.
   B.kickT -= dt;
-  if (op.blocking && dist < 1.5 && me.state === 'idle' && B.kickT <= 0) {
+  if (op.blocking && dist < 1.1 && me.state === 'idle' && B.kickT <= 0) {
     B.kickT = rnd(1.5, 3);
     if (Math.random() < 0.35) kick(me, room);
   }
