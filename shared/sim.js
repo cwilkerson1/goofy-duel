@@ -554,7 +554,7 @@ function stepPlayer(room, p, dt) {
     p.prevB = p.input.b;
     if (blockPressed && feint(p, room)) { /* pressing block mid-attack cancels it */ }
     else if (p.state === 'hold') {
-      if (DIRS.includes(p.input.d)) p.sdir = p.input.d;
+      // The side is locked in when the attack starts (startHold); to change it, feint and attack again.
       if (p.st >= T.MAX_HOLD) p.release = true;
       const draw = p.riposte > 0 ? T.RIPOSTE_DRAW : tm(p, 'DRAW');
       if (p.release && p.st >= draw) {
@@ -574,10 +574,10 @@ function stepPlayer(room, p, dt) {
         room.events.push({ t: 'kickMiss', id: p.id });
       }
     }
-    if (p.queued) { // a buffered attack: start it as soon as you can, on the side you're steering to now
+    if (p.queued) { // a buffered attack: start it as soon as you can, on the side picked when you clicked
       const q = p.queued; q.t += dt;
       if (q.t > QUEUE_FOR) p.queued = null;
-      else if (canStart(p) && startHold(p, DIRS.includes(p.input.d) ? p.input.d : q.dir) && q.release) p.release = true;
+      else if (canStart(p) && startHold(p, q.dir) && q.release) p.release = true;
     }
     if (p.state === 'idle' && DIRS.includes(p.input.d)) p.gdir = p.input.d;
     p.blocking = !!p.input.b && p.state === 'idle' && p.stun <= 0 && !(p.downT > 0);

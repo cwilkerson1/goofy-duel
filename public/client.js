@@ -1063,7 +1063,7 @@ function closeFastLane() { try { fast.pc && fast.pc.close(); } catch {} fast.pc 
 
 // ---------- input: Last Oasis-style mouse direction ----------
 // Moving the mouse picks a side (left / right / up) that sticks until you move another way.
-// Hold left click to draw back on that side, keep steering, release to swing.
+// Hold left click to draw back on that side (locked in at the click), release to swing.
 // Hold right click and steer toward the incoming blade to block. Right click or Q during an attack feints.
 const keys = new Set();
 const look = { yaw: 0, pitch: 0 };
@@ -1139,7 +1139,7 @@ addEventListener('mousedown', (e) => {
     atkHeld = true; holdSeq++; send({ t: 'hold', d: dir, q: holdSeq });
     const s = cur && cur.players.find((q) => q && q.id === myId);
     // Pressed while the last swing is still going: the server remembers it and starts it the moment it can.
-    if (s && !s.dead && ['idle', 'active', 'recover'].includes(s.state) && s.stam >= 5) swingIntent = { pressT: performance.now(), made: performance.now(), relT: null, b: isBlocking(), q: s.state !== 'idle', seq: holdSeq };
+    if (s && !s.dead && ['idle', 'active', 'recover'].includes(s.state) && s.stam >= 5) swingIntent = { pressT: performance.now(), made: performance.now(), relT: null, b: isBlocking(), q: s.state !== 'idle', seq: holdSeq, dir };
   }
   if (e.button === 2) { blockHeld = true; aimGuardAt(dir); if (atkHeld || swingIntent) feintAt = performance.now(); }
   if (e.button === 3 || e.button === 4) send({ t: 'kick' });
@@ -1168,7 +1168,7 @@ function predictMyAction(p, now) {
     blocking: s.blocking, gdir: s.gdir, stun: Math.max(0, s.stun - age), riposte: s.riposte };
   const free = o.stun <= 0 && !(p.downT > 0), I = swingIntent, wait = Math.max(250, (pred.rtt ?? 100) * 1.5 + 80);
   if (I) {
-    if (!atkHeld && I.relT === null) Object.assign(I, { relT: now, dir, aim: look.pitch * 180 / Math.PI });
+    if (!atkHeld && I.relT === null) Object.assign(I, { relT: now, aim: look.pitch * 180 / Math.PI }); // the side was locked at the click
     if (!isBlocking()) I.b = false;
     const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
     if (I.q && (s.state === 'active' || s.state === 'recover')) {
@@ -1186,11 +1186,10 @@ function predictMyAction(p, now) {
   }
   if (swingIntent && !(I.q && (s.state === 'active' || s.state === 'recover') && now < I.pressT)) {
     const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + (s.riposte ? T.RIPOSTE_DRAW : tm(o, 'DRAW')) * 1000);
-    if (now < go) Object.assign(o, { state: 'hold', st: (now - I.pressT) / 1000, sdir: dir, heavy: false, blocking: false });
+    if (now < go) Object.assign(o, { state: 'hold', st: (now - I.pressT) / 1000, sdir: I.dir, heavy: false, blocking: false });
     else Object.assign(o, { state: 'active', st: (now - go) / 1000, sdir: I.dir, saim: I.aim, heavy: (go - I.pressT) / 1000 >= tm(o, 'HEAVY_AT'), blocking: false });
   } else if (now - feintAt < wait && (o.state === 'hold' || (o.state === 'active' && s.st < tm(o, 'ACTIVE') * T.FEINT_IN))) Object.assign(o, { state: 'idle', st: 0, heavy: false });
   else if (o.state === 'idle' && free) Object.assign(o, { blocking: isBlocking(), gdir: dir });
-  else if (o.state === 'hold') o.sdir = dir;
   return o;
 }
 

@@ -75,7 +75,7 @@ anyone who turtles. Its settings are at the top of `bot.js`.
 | Light attack | **Click** (or hold just long enough to draw back) and release. Quick to throw, quick to recover. A ring round the crosshair fills while you hold; once it passes the tick mark, letting go swings a light attack. |
 | Heavy attack | **Keep holding** until the ring closes, you hear a rising ping and your weapon glows white. Your weapon draws back further, the swing is a third slower and you recover slower, but it does 1.5× damage and staggers someone who blocks it. You move slower while charging. |
 | Block | **Hold right click** and move the mouse **toward the side the blade is coming from**. While you hold it, the guard follows the mouse freely, no flick needed: slide left or right to switch sides, up for overhead, back down to return to the sides. A good block bounces the attacker back and opens a **riposte**: your next swing winds up much faster for a moment. Blocking a heavy still staggers you briefly. Blocking costs stamina; with too little, the guard breaks. Every weapon winds up in one of three shapes you can read: raised diagonally to one side for a side swing, or held straight up over the head for an overhead. A faint streak follows the weapon's head as it's drawn back and swung. |
-| Feint | **Q** (or right click) cancels your attack: any time while drawing back, and even early in the swing itself, up to about halfway, as long as it hasn't hit yet. Cancelling a swing already in motion costs more stamina. Or switch sides just before you release. |
+| Feint | **Q** (or right click) cancels your attack: any time while drawing back, and even early in the swing itself, up to about halfway, as long as it hasn't hit yet. Cancelling a swing already in motion costs more stamina. Your side is locked in the moment you click, so to come from another side, feint and attack again. |
 | Kick | **F** (or a side mouse button). You see your boot fly out. Kicks can't be blocked and they're short range. **Land it** and the target is knocked flat on their back for about two seconds: they can't block, swing or move until they've got up, so step in and look down to hit them on the ground. A kick burns most of your stamina (65 of 100) and you need at least 40 to throw one. **Miss** and you stumble forward, unable to act for a moment, with your stamina slow to recover. |
 | Rematch, once the match is over | **R** (both fighters press it, and a fresh best of 5 starts at 0–0) |
 | Copy an invite link while waiting for an opponent | **C** |
@@ -85,7 +85,7 @@ anyone who turtles. Its settings are at the top of `bot.js`.
 
 **Reading attacks.** There are no hints. Watch where their weapon is drawn back to: a swing drawn on
 *their* right arrives on *your* left. The only glow is white, when their attack has become a heavy.
-They can switch sides until they release, so stay sharp.
+Once they start drawing back, their side is locked in; the only way to change it is to feint and start again.
 
 **Chaining swings.** You don't have to wait for a swing to fully finish: click again while it's still going and the next attack starts the moment it can, halfway through the recovery. Move the mouse toward a side as you click to pick it, so right-then-left combos flow. (A swing that got parried still has its full recovery.)
 
