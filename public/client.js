@@ -6,8 +6,9 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
+import { buildWeapon, knightGeometry, UPPER_ARM, FOREARM, THIGH, SHIN } from '/models.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
 const TEAM_CSS = ['#e0493e', '#3e7be0'];
@@ -257,6 +258,23 @@ TEX.steel = makePBR(256, 256, (u, v) => {
   const brush = tnoise(u * 0.25, v * 8, 4, 4), wear = tnoise(u, v, 5, 5);
   const c = mixc([150, 156, 164], [200, 206, 214], brush); return { h: brush * 0.15 + wear * 0.1, c: mixc(c, [110, 104, 98], clamp01(wear * 1.5 - 0.9)), r: 0.25 + wear * 0.25 };
 }, { repeat: [1, 1], bump: 0.6 });
+// Armour plate: hammered (faint dents), polished along its length, scratched and nicked from use,
+// with grime collecting in patches.
+TEX.plate = (() => {
+  const scr = Array.from({ length: 70 }, () => { const a = rnd(0, Math.PI), l = rnd(0.02, 0.12); return { x: Math.random(), y: Math.random(), dx: Math.cos(a) * l, dy: Math.sin(a) * l, w: rnd(0.0015, 0.004) }; });
+  return makePBR(256, 256, (u, v) => {
+    const brush = tnoise(u * 0.25, v * 6, 4, 4), dent = tnoise(u, v, 5, 3), grime = tnoise(u + 0.3, v + 0.7, 3, 4);
+    let s = 0;
+    for (const q of scr) {
+      let px = u - q.x, py = v - q.y; px -= Math.round(px); py -= Math.round(py);
+      const t = clamp01((px * q.dx + py * q.dy) / (q.dx * q.dx + q.dy * q.dy)), d = Math.hypot(px - q.dx * t, py - q.dy * t);
+      if (d < q.w) s = Math.max(s, 1 - d / q.w);
+    }
+    const base = mixc([132, 138, 146], [186, 192, 200], brush * 0.7 + dent * 0.3);
+    const c = mixc(mixc(base, [225, 228, 232], s * 0.6), [70, 64, 58], clamp01(grime * 1.8 - 1.15));
+    return { h: dent * 0.5 + brush * 0.08 - s * 0.25, c, r: clamp01(0.28 + grime * 0.25 - s * 0.12 + (1 - brush) * 0.06) };
+  }, { repeat: [2, 2], bump: 1.2 });
+})();
 // Woven cloth.
 TEX.cloth = makePBR(128, 128, (u, v) => {
   const a = Math.sin(u * Math.PI * 64) * 0.5 + 0.5, b = Math.sin(v * Math.PI * 64) * 0.5 + 0.5, n = tnoise(u, v, 4, 4);
@@ -539,177 +557,113 @@ function updateCrowd(t, dt) {
 
 // ---------- knights ----------
 const UP = new THREE.Vector3(0, 1, 0);
-const unitCyl = (rTop, rBot) => { const g = new THREE.CylinderGeometry(rTop, rBot, 1, 20); g.translate(0, 0.5, 0); return g; };
-// The torso is a surcoat over armour: a lathed shape with a chest, narrower waist and shoulders, flattened front-to-back.
-const lathe = (pts, seg = 32) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
-const torsoGeo = lathe([[0.001, 0], [0.175, 0], [0.168, 0.18], [0.178, 0.42], [0.212, 0.63], [0.222, 0.77], [0.205, 0.88], [0.14, 0.97], [0.075, 1], [0.001, 1]]); torsoGeo.scale(1, 1, 0.8);
-const skirtGeo = lathe([[0.185, 0], [0.205, -0.15], [0.235, -0.36]]); skirtGeo.scale(1, 1, 0.85);
-const GEO = {
-  arm: unitCyl(0.055, 0.065), leg: unitCyl(0.07, 0.085), torso: torsoGeo, skirt: skirtGeo,
-  vamb: unitCyl(0.066, 0.058), greave: unitCyl(0.08, 0.068),
-  hand: new THREE.BoxGeometry(0.085, 0.1, 0.11), boot: new THREE.BoxGeometry(0.13, 0.09, 0.27), stump: new THREE.SphereGeometry(0.075, 10, 8),
-  head: new THREE.CylinderGeometry(HEAD_R * 1.0, HEAD_R * 1.07, HEAD_R * 2.1, 28), helmTop: new THREE.SphereGeometry(HEAD_R * 1.0, 28, 10, 0, Math.PI * 2, 0, Math.PI / 2),
-  slit: new THREE.BoxGeometry(HEAD_R * 1.5, 0.014, 0.03), strip: new THREE.BoxGeometry(0.026, HEAD_R * 1.7, 0.016), band: new THREE.TorusGeometry(HEAD_R * 1.04, 0.01, 6, 28),
-  crest: new THREE.BoxGeometry(0.03, 0.09, HEAD_R * 2.2), hole: new THREE.CylinderGeometry(0.006, 0.006, 0.04, 6),
-  pauldron: new THREE.SphereGeometry(0.105, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), belt: new THREE.CylinderGeometry(0.185, 0.185, 0.06, 24),
-  buckle: new THREE.BoxGeometry(0.07, 0.06, 0.02), knee: new THREE.SphereGeometry(0.06, 14, 10), rim: new THREE.TorusGeometry(HEAD_R + 0.015, 0.012, 8, 28),
-  plume: new THREE.ConeGeometry(0.04, 0.2, 8), eye: new THREE.SphereGeometry(0.022, 8, 6), deadEye: new THREE.BoxGeometry(0.045, 0.01, 0.01),
-  mouth: new THREE.TorusGeometry(0.03, 0.008, 6, 12, Math.PI),
-};
-const STEEL = pbrMat(TEX.steel, { metalness: 0.9, color: 0xd0d4da });
+const GEO = { stump: new THREE.SphereGeometry(0.075, 10, 8) };
+const KG = knightGeometry(); // the plate armour pieces, shared by every knight
+// Metal picks up reflections of the night sky and torchlight around it, which is most of what makes it read as metal.
+const SHINE = { envMap: scene.environment, envMapIntensity: 1.1 };
+const STEEL = pbrMat(TEX.steel, { metalness: 0.9, color: 0xd0d4da, ...SHINE });
 const MAT = {
-  steel: STEEL, darkSteel: pbrMat(TEX.steel, { metalness: 0.85, color: 0x707680 }), mail: pbrMat(TEX.mail, { metalness: 0.8, color: 0xd8dbe0 }),
-  slot: new THREE.MeshBasicMaterial({ color: 0x050505 }), grip: pbrMat(TEX.leather), brass: pbrMat(TEX.steel, { metalness: 0.9, color: 0xc8a050 }),
-  skin: new THREE.MeshStandardMaterial({ color: 0xe8cba8, roughness: 0.8 }), pants: new THREE.MeshStandardMaterial({ color: 0x3b2c4a }),
-  boot: new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.6 }), leather: pbrMat(TEX.leather, { color: 0x8a6a50 }),
-  iron: STEEL, stump: new THREE.MeshStandardMaterial({ color: 0x8a0f14, roughness: 0.35 }),
-  face: new THREE.MeshStandardMaterial({ color: 0xffe0bd }), eye: new THREE.MeshBasicMaterial({ color: 0x111111 }),
-  gold: pbrMat(TEX.steel, { metalness: 0.95, color: 0xd9b048 }), wood: pbrMat(TEX.grain),
+  steel: STEEL, darkSteel: pbrMat(TEX.steel, { metalness: 0.85, color: 0x707680, ...SHINE }), mail: pbrMat(TEX.mail, { metalness: 0.8, color: 0xd8dbe0, ...SHINE }),
+  plate: pbrMat(TEX.plate, { metalness: 0.95, color: 0xb4bac2, ...SHINE }),
+  slot: new THREE.MeshBasicMaterial({ color: 0x050505 }), grip: pbrMat(TEX.leather), brass: pbrMat(TEX.steel, { metalness: 0.9, color: 0xc8a050, ...SHINE }),
+  boot: new THREE.MeshStandardMaterial({ color: 0x2a1e14, roughness: 0.8 }), leather: pbrMat(TEX.leather, { color: 0x8a6a50 }),
+  stump: new THREE.MeshStandardMaterial({ color: 0x8a0f14, roughness: 0.35 }),
+  gold: pbrMat(TEX.steel, { metalness: 0.95, color: 0xd9b048, ...SHINE }), wood: pbrMat(TEX.grain),
+  jewel: new THREE.MeshStandardMaterial({ color: 0x3fa7ff, emissive: 0x1050ff, roughness: 0.1 }),
 };
+// What the weapon models are made of. Each weapon gets its own blade material, so it can glow on a heavy.
+const WMAT = { ...MAT, dark: MAT.darkSteel, blade: (gold) => pbrMat(TEX.steel, gold ? { metalness: 1, color: 0xffe08a, emissive: 0x332200, ...SHINE } : { metalness: 1, color: 0xeef1f4, ...SHINE }) };
 const FLAIL_PIVOT = 0.38, FLAIL_CHAIN = 0.45; // where the chain hangs from, and how far the ball sits from there
-// Each weapon is a group whose origin is the grip, pointing up +y along its reach.
-// userData.glowMat is the part that glows while drawing back.
+// Each weapon is a group whose origin is the grip, pointing up +y along its reach (see models.js).
+// userData.glowMat is the part that glows on a charged heavy.
 function makeWeapon(id) {
-  const W = WEAPONS[id] || WEAPONS.longsword, L = W.len, g = new THREE.Group();
-  const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.5, ...o });
-  const steel = () => pbrMat(TEX.steel, { metalness: 0.92, color: 0xe4e8ee });
-  const add = (geo, mat, y = 0, x = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
-  const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
-  const cyl = (r, h) => new THREE.CylinderGeometry(r, r, h, 10);
-  // A real blade: tapered, pointed and bevelled to an edge.
-  const blade = (w, len, thick = 0.008, tip = 0.16) => {
-    const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(-w * 0.38, len * (1 - tip)); sh.lineTo(0, len); sh.lineTo(w * 0.38, len * (1 - tip)); sh.lineTo(w / 2, 0); sh.closePath();
-    const geo = new THREE.ExtrudeGeometry(sh, { depth: thick * 0.4, bevelEnabled: true, bevelThickness: thick * 0.5, bevelSize: w * 0.22, bevelSegments: 2, curveSegments: 1 });
-    geo.translate(0, 0, -thick * 0.2); geo.computeVertexNormals(); return geo;
-  };
-  const guard = (w) => new THREE.CapsuleGeometry(0.018, w, 3, 8).rotateZ(Math.PI / 2);
-  const grip = () => { add(cyl(0.02, 0.17), MAT.grip, -0.08); add(new THREE.SphereGeometry(0.032, 12, 8), MAT.steel, -0.17); };
-  let glow;
-  switch (id) {
-    case 'greatsword': glow = steel(); add(blade(0.075, L, 0.012), glow, 0.03); add(guard(0.32), MAT.steel, 0.01); add(cyl(0.022, 0.3), MAT.grip, -0.15); add(new THREE.SphereGeometry(0.04, 12, 8), MAT.steel, -0.31); break;
-    case 'dagger': glow = steel(); add(blade(0.045, L, 0.007, 0.3), glow, 0.02); add(guard(0.1), MAT.brass, 0.01); grip(); break;
-    case 'axe': glow = steel(); add(cyl(0.022, L + 0.2), MAT.wood, L / 2 - 0.1); add(box(0.24, 0.2, 0.025), glow, L - 0.1, 0.12); break;
-    case 'hammer': glow = std(0x777777, { metalness: 0.6 }); add(cyl(0.024, L + 0.35), MAT.wood, L / 2 - 0.18); add(box(0.3, 0.15, 0.15), glow, L - 0.08); break;
-    case 'halberd': {
-      // Ash pole, a broad axe blade facing the target, a back spike, and a spearpoint on top.
-      glow = steel(); add(cyl(0.022, L + 0.35), MAT.wood, L / 2 - 0.27);
-      add(box(0.2, 0.26, 0.014), glow, L - 0.3, 0.13);
-      add(box(0.06, 0.3, 0.03), MAT.steel, L - 0.3, 0.03); // the socket that holds the head on
-      const back = add(new THREE.ConeGeometry(0.025, 0.14, 6), MAT.steel, L - 0.3, -0.09); back.rotation.z = Math.PI / 2;
-      add(new THREE.ConeGeometry(0.03, 0.24, 6), glow, L - 0.05); break;
-    }
-    case 'scythe': {
-      glow = std(0xbfc6cc, { metalness: 0.8, roughness: 0.3 }); add(cyl(0.022, L + 0.5), std(0x3a2a1a), L / 2 - 0.25);
-      const b = add(box(0.55, 0.06, 0.012), glow, L - 0.05, 0.26); b.rotation.z = -0.25; break;
-    }
-    case 'arming': glow = steel(); add(blade(0.045, L, 0.008), glow, 0.03); add(guard(0.18), MAT.steel, 0.01); grip(); break;
-    case 'mace': {
-      // Steel haft with a leather grip, and a head of six flanges around a core.
-      glow = pbrMat(TEX.steel, { metalness: 0.9, color: 0xb8bec6 });
-      add(cyl(0.017, 0.62), MAT.darkSteel, 0.24); add(cyl(0.022, 0.17), MAT.grip, 0.01); add(new THREE.SphereGeometry(0.03, 10, 8), MAT.steel, -0.08);
-      add(cyl(0.034, 0.16), glow, L - 0.08);
-      for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2, f = add(box(0.05, 0.15, 0.012), glow, L - 0.08, Math.cos(a) * 0.045, Math.sin(a) * 0.045); f.rotation.y = -a; }
-      add(new THREE.SphereGeometry(0.022, 10, 8), glow, L);
-      break;
-    }
-    case 'flail': {
-      // Wooden handle, then a loose chain and spiked iron ball on their own pivot; Knight.swingChain() swings them.
-      glow = pbrMat(TEX.steel, { metalness: 0.85, color: 0x9a9fa6 });
-      add(cyl(0.022, 0.42), MAT.wood, 0.15); add(cyl(0.026, 0.05), MAT.darkSteel, 0.36);
-      const cg = new THREE.Group(); cg.position.y = FLAIL_PIVOT; g.add(cg); g.userData.chain = cg;
-      const hang = (geo, mat, y, x = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; cg.add(m); return m; };
-      for (let k = 0; k < 6; k++) { const l = hang(new THREE.TorusGeometry(0.018, 0.005, 5, 10), MAT.darkSteel, 0.03 + k * 0.06); l.rotation.y = (k % 2) * Math.PI / 2; }
-      const by = FLAIL_CHAIN;
-      hang(new THREE.SphereGeometry(0.058, 16, 12), glow, by);
-      for (let k = 0; k < 10; k++) {
-        const u = new THREE.Vector3(Math.sin(k * 2.4) * Math.sqrt(1 - ((k + 0.5) / 5 - 1) ** 2), (k + 0.5) / 5 - 1, Math.cos(k * 2.4) * Math.sqrt(1 - ((k + 0.5) / 5 - 1) ** 2)).normalize();
-        const c = hang(new THREE.ConeGeometry(0.012, 0.045, 5), glow, by + u.y * 0.075, u.x * 0.075, u.z * 0.075); c.quaternion.setFromUnitVectors(UP, u);
-      }
-      break;
-    }
-    case 'pick': {
-      // A war hammer's cousin: a long spike on the striking side and a small hammer face behind it.
-      glow = steel();
-      add(cyl(0.022, L + 0.15), MAT.wood, L / 2 - 0.1); add(box(0.06, 0.09, 0.05), MAT.darkSteel, L - 0.07);
-      const spike = add(new THREE.ConeGeometry(0.026, 0.2, 6), glow, L - 0.07, 0.12); spike.rotation.z = -Math.PI / 2;
-      const face = add(cyl(0.026, 0.06), MAT.darkSteel, L - 0.07, -0.06); face.rotation.z = Math.PI / 2;
-      break;
-    }
-    case 'fists': glow = pbrMat(TEX.steel, { metalness: 0.9, color: 0xb8bec6 }); g.add(makeFist(glow)); break;
-    case 'excalibur': glow = pbrMat(TEX.steel, { metalness: 0.95, color: 0xffe08a, emissive: 0x332200 }); add(blade(0.06, L, 0.01), glow, 0.03); add(guard(0.28), MAT.gold, 0.01); add(new THREE.SphereGeometry(0.03, 8, 6), std(0x3fa7ff, { emissive: 0x1050ff }), 0.01, 0, -0.03); grip(); break;
-    default: glow = steel(); add(blade(0.05, L, 0.009), glow, 0.03); add(guard(0.22), MAT.steel, 0.01); grip();
-  }
-  g.userData.glowMat = glow; g.userData.baseEmissive = glow.emissive.clone();
+  let g;
+  if (id === 'fists') { const glow = pbrMat(TEX.steel, { metalness: 0.9, color: 0xb8bec6, ...SHINE }); g = new THREE.Group(); g.add(makeFist(glow)); g.userData.glowMat = glow; }
+  else g = buildWeapon(id, (WEAPONS[id] || WEAPONS.longsword).len, WMAT);
+  g.userData.baseEmissive = g.userData.glowMat.emissive.clone();
   return g;
 }
 // A clenched gauntlet, knuckles pointing up +y: the back of the hand, four curled fingers, the thumb
 // folded across them, and a flared cuff. knuckles is the material that glows on a charged punch.
 function makeFist(knuckles) {
   const g = new THREE.Group(), add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m; };
-  add(new THREE.BoxGeometry(0.088, 0.075, 0.075), MAT.steel, 0, 0, 0.004);
+  add(new THREE.BoxGeometry(0.088, 0.075, 0.075), MAT.plate, 0, 0, 0.004);
   for (let k = 0; k < 4; k++) {
     const x = -0.033 + k * 0.022, f = add(new THREE.CapsuleGeometry(0.0125, 0.05, 3, 8), knuckles, x, 0.046 - Math.abs(k - 1.5) * 0.004, 0.006); f.rotation.x = Math.PI / 2;
   }
-  const th = add(new THREE.CapsuleGeometry(0.013, 0.045, 3, 8), MAT.steel, -0.004, 0.012, 0.046); th.rotation.z = Math.PI / 2;
+  const th = add(new THREE.CapsuleGeometry(0.013, 0.045, 3, 8), MAT.plate, -0.004, 0.012, 0.046); th.rotation.z = Math.PI / 2;
   add(new THREE.CylinderGeometry(0.05, 0.058, 0.07, 14), MAT.darkSteel, 0, -0.07, 0);
   return g;
 }
-// A closed great helm with a visor slit, breathing holes and a crest in the team colour.
+// The helm: a great bascinet with a snouted visor, a mail aventail, and a plume in the team colour.
+const plumeMats = {};
 function makeHead(color, dead = false) {
-  const g = new THREE.Group(), add = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
-  add(GEO.head, STEEL.clone(), 0, -0.02); // child 0: the helm shell (takes bruise/damage tint)
-  add(GEO.helmTop, STEEL, 0, HEAD_R * 1.03).scale.y = 0.42;
-  add(GEO.slit, MAT.slot, 0, 0.025, -HEAD_R * 1.0);
-  add(GEO.strip, MAT.darkSteel, 0, -0.03, -HEAD_R * 1.04);
-  const band = add(GEO.band, MAT.darkSteel, 0, 0.05); band.rotation.x = Math.PI / 2;
-  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) { const h = add(GEO.hole, MAT.slot, 0.035 + c * 0.022, -0.045 - r * 0.025, -HEAD_R * 1.02); h.rotation.x = Math.PI / 2; }
-  const crest = add(GEO.crest, pbrMat({ normalMap: TEX.cloth.normalMap }, { color, roughness: 0.9 }), 0, HEAD_R * 1.35 + 0.03); crest.castShadow = true;
+  const g = new THREE.Group(), add = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.position.y = -0.03; m.castShadow = true; g.add(m); return m; };
+  add(KG.skull, MAT.plate.clone()); // child 0: the helm shell (takes bruise/damage tint)
+  add(KG.visor, MAT.plate); add(KG.slits, MAT.slot); add(KG.aventail, MAT.mail);
+  add(KG.plume, plumeMats[color] ??= pbrMat({ normalMap: TEX.cloth.normalMap }, { color, roughness: 0.85, side: THREE.DoubleSide }));
+  add(KG.plumeHolder, MAT.brass);
   if (dead) g.rotation.z = 0.2;
-  g.traverse((o) => { o.castShadow = true; });
   g.userData.mouth = new THREE.Object3D();
   return g;
 }
-const _d = new THREE.Vector3();
-function seg(mesh, a, b) {
-  _d.subVectors(b, a); const l = _d.length();
-  mesh.position.copy(a); mesh.scale.set(1, Math.max(l, 1e-3), 1);
-  if (l > 1e-5) mesh.quaternion.setFromUnitVectors(UP, _d.divideScalar(l));
+const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _d = new THREE.Vector3(), _m4 = new THREE.Matrix4();
+// Place a piece at joint a with its +y running to b and its +z turned toward `toward` as near as it can
+// be, stretched to fit if it was modelled at length `nominal`.
+function place(obj, a, b, toward, nominal) {
+  _y.subVectors(b, a); const l = _y.length(); obj.position.copy(a);
+  if (l < 1e-5) return;
+  _y.divideScalar(l);
+  _z.copy(toward).addScaledVector(_y, -toward.dot(_y));
+  if (_z.lengthSq() < 1e-6) _z.set(_y.y, -_y.x, 0).cross(_y);
+  _z.normalize(); _x.crossVectors(_y, _z);
+  obj.quaternion.setFromRotationMatrix(_m4.makeBasis(_x, _y, _z));
+  obj.scale.set(1, nominal ? l / nominal : 1, 1);
+}
+// Where the elbow goes: upper arm and forearm keep their length, and the joint bends toward `pole`.
+function elbowAt(sh, hand, pole) {
+  const d = hand.clone().sub(sh), L = d.length(), A = UPPER_ARM, B = FOREARM;
+  if (L >= A + B - 1e-4 || L < 1e-4) return sh.clone().lerp(hand, A / (A + B));
+  const x = (A * A - B * B + L * L) / (2 * L), h = Math.sqrt(Math.max(0, A * A - x * x));
+  d.divideScalar(L);
+  const p = pole.clone().addScaledVector(d, -pole.dot(d)); if (p.lengthSq() < 1e-8) p.set(0, -1, 0);
+  return sh.clone().addScaledVector(d, x).addScaledVector(p.normalize(), h);
 }
 
-// Surcoat colour map: the team colour with a white cross on the chest (and a hem stripe on the skirt).
-const surcoatTex = (color, skirt) => canvasTexture(256, 256, (g, w, h) => {
+// Tabard colour map: the team colour with a white cross on the chest and a hem stripe (the front
+// panel is the middle of the texture, u = 0.5).
+const tabardTex = (color) => canvasTexture(256, 256, (g, w, h) => {
   g.fillStyle = new THREE.Color(color).getStyle(); g.fillRect(0, 0, w, h);
   for (let i = 0; i < 1500; i++) { g.fillStyle = `rgba(0,0,0,${rnd(0.02, 0.06)})`; g.fillRect(rnd(0, w), rnd(0, h), rnd(1, 4), rnd(1, 4)); }
   g.fillStyle = '#efe8d8';
-  if (skirt) { g.fillRect(0, h - 22, w, 10); return; }
-  g.fillRect(w * 0.5 - 9, h * 0.18, 18, h * 0.42); g.fillRect(w * 0.5 - 34, h * 0.28, 68, 16); // the cross sits on the front (u = 0.5)
+  g.fillRect(0, h - 16, w, 7);
+  g.fillRect(w * 0.5 - 11, h * 0.06, 22, h * 0.46); g.fillRect(w * 0.5 - 44, h * 0.16, 88, 20);
 });
-const _qYaw = new THREE.Quaternion();
-const _qTumble = new THREE.Quaternion(), _vAxis = new THREE.Vector3();
+const _qTumble = new THREE.Quaternion(), _vAxis = new THREE.Vector3(), _tilt = new THREE.Quaternion();
 const TRAIL_N = 24, TRAIL_LIFE = 0.22;
 class Knight {
   constructor(color) {
     this.color = color;
     this.root = new THREE.Group(); scene.add(this.root);
-    const teamMat = pbrMat({ map: surcoatTex(TEAM[color], false), normalMap: TEX.cloth.normalMap, roughnessMap: TEX.cloth.roughnessMap }, { normalScale: new THREE.Vector2(0.4, 0.4) });
-    teamMat.map.wrapS = teamMat.map.wrapT = THREE.ClampToEdgeWrapping; teamMat.map.repeat.set(1, 1);
-    const m = (geo, mat) => { const x = new THREE.Mesh(geo, mat); x.castShadow = true; this.root.add(x); return x; };
-    this.torso = m(GEO.torso, teamMat);
-    // Each body part gets its own material so it can bruise as it takes damage.
-    this.mats = { armR: MAT.mail.clone(), armL: MAT.mail.clone(), legR: MAT.mail.clone(), legL: MAT.mail.clone(), head: null, torso: teamMat };
+    const tabardMat = pbrMat({ map: tabardTex(TEAM[color]), normalMap: TEX.cloth.normalMap, roughnessMap: TEX.cloth.roughnessMap }, { side: THREE.DoubleSide, normalScale: new THREE.Vector2(0.4, 0.4) });
+    tabardMat.map.wrapS = tabardMat.map.wrapT = THREE.ClampToEdgeWrapping; tabardMat.map.repeat.set(1, 1);
+    const mesh = (geo, mat, parent = this.root) => { const x = new THREE.Mesh(geo, mat); x.castShadow = true; parent.add(x); return x; };
+    const group = () => { const g = new THREE.Group(); this.root.add(g); return g; };
+    // Each limb's plates get their own material so they can bruise as it takes damage.
+    this.mats = { armR: MAT.plate.clone(), armL: MAT.plate.clone(), legR: MAT.plate.clone(), legL: MAT.plate.clone(), head: null, torso: tabardMat };
     this.head = makeHead(TEAM[color]); this.mats.head = this.head.children[0].material; this.head.rotation.order = 'YXZ'; this.root.add(this.head);
     for (const k in this.mats) this.mats[k].userData.base = this.mats[k].color.clone();
-    this.armR = m(GEO.arm, this.mats.armR); this.armL = m(GEO.arm, this.mats.armL);
-    this.vambR = m(GEO.vamb, STEEL); this.vambL = m(GEO.vamb, STEEL);
-    this.handR = m(GEO.hand, STEEL); this.handL = m(GEO.hand, STEEL);
-    this.legs = ['R', 'L'].map((s) => ({ thigh: m(GEO.leg, this.mats['leg' + s]), shin: m(GEO.greave, STEEL), boot: m(GEO.boot, MAT.darkSteel) }));
-    this.stumps = [0, 1, 2, 3, 4].map(() => m(GEO.stump, MAT.stump));
-    this.skirt = m(GEO.skirt, pbrMat({ map: surcoatTex(TEAM[color], true), normalMap: TEX.cloth.normalMap, roughnessMap: TEX.cloth.roughnessMap }, { side: THREE.DoubleSide, normalScale: new THREE.Vector2(0.4, 0.4) }));
-    // Armour bits: shoulder plates, a belt with a gold buckle, and knee guards.
-    const plate = STEEL;
-    this.pauldR = m(GEO.pauldron, plate); this.pauldL = m(GEO.pauldron, plate);
-    this.belt = m(GEO.belt, MAT.leather); this.buckle = m(GEO.buckle, MAT.brass);
-    this.knees = [m(GEO.knee, MAT.iron), m(GEO.knee, MAT.iron)];
+    // The body: breastplate, faulds and gorget, with the team tabard and a sword belt over them.
+    this.body = group();
+    mesh(KG.cuirass, MAT.plate, this.body); mesh(KG.tabard, tabardMat, this.body); mesh(KG.belt, MAT.leather, this.body); mesh(KG.buckle, MAT.brass, this.body);
+    this.pauldR = mesh(KG.pauldR, MAT.plate); this.pauldL = mesh(KG.pauldL, MAT.plate);
+    this.arms = ['R', 'L'].map((s) => { const m = this.mats['arm' + s]; return { key: 'arm' + s, upper: mesh(KG.upperArm, m), fore: mesh(KG.forearm, m), hand: mesh(KG.gauntlet, m) }; });
+    this.legs = ['R', 'L'].map((s) => {
+      const m = this.mats['leg' + s], thigh = group(), boot = group();
+      mesh(KG.cuisse, m, thigh); mesh(KG.thighMail, MAT.mail, thigh); mesh(KG.sabaton, m, boot); mesh(KG.sole, MAT.boot, boot);
+      return { key: 'leg' + s, thigh, knee: mesh(s === 'R' ? KG.poleynR : KG.poleynL, m), shin: mesh(KG.greave, m), boot };
+    });
+    this.stumps = [0, 1, 2, 3, 4].map(() => mesh(GEO.stump, MAT.stump));
     this.weaponId = 'longsword'; this.sword = makeWeapon(this.weaponId); this.root.add(this.sword);
     this.offFist = makeFist(MAT.darkSteel); this.offFist.visible = false; this.root.add(this.offFist); // the non-punching hand, when boxing
     // A faint streak behind the weapon's head as it's drawn back and swung, so you can see which way it's moving.
@@ -749,47 +703,55 @@ class Knight {
       mat.color.copy(mat.userData.base).lerp(BRUISE, hurt * 0.75);
     }
     // Falling down (knocked over, or dead weight) is already in the skeleton; tq turns the pieces
-    // that are placed by facing (head, boots, buckle) along with the body.
+    // that are placed by facing (head, boots, the way plates face) along with the body.
     this.root.position.set(0, 0, 0); this.root.quaternion.identity();
     const tb = tumble(p), tq = _qTumble.identity();
     if (tb.angle) tq.setFromAxisAngle(_vAxis.set(...tb.axis).normalize(), tb.angle);
     const P = {};
     for (const [k, v] of Object.entries(sk)) if (Array.isArray(v) && v.length === 3) P[k] = V(v);
-    this.torso.visible = this.belt.visible = this.buckle.visible = this.skirt.visible = !firstPerson;
-    seg(this.torso, P.hip, P.neck); this.torso.quaternion.multiply(_qYaw.setFromAxisAngle(UP, p.yaw)); // keep the chest facing forward
-    this.skirt.position.copy(P.hip); this.skirt.quaternion.copy(this.torso.quaternion);
-    const up = P.neck.clone().sub(P.hip).normalize(), f = forward(p.yaw), fw = new THREE.Vector3(f[0], 0, f[2]).applyQuaternion(tq);
-    this.belt.position.copy(P.hip).addScaledVector(up, 0.07); this.belt.quaternion.copy(this.torso.quaternion);
-    this.buckle.position.copy(this.belt.position).addScaledVector(fw, 0.185); this.buckle.quaternion.setFromAxisAngle(UP, p.yaw).premultiply(tq);
-    for (const [pd, key, sh] of [[this.pauldR, 'armR', P.shR], [this.pauldL, 'armL', P.shL]]) {
-      pd.visible = !firstPerson && !cut(key); if (!pd.visible) continue;
-      pd.position.copy(sh).addScaledVector(up, 0.02); pd.quaternion.copy(this.torso.quaternion); pd.scale.set(1.05, 0.8, 1.05);
+    const f = forward(p.yaw), fw = new THREE.Vector3(f[0], 0, f[2]).applyQuaternion(tq), upT = UP.clone().applyQuaternion(tq);
+    const back = fw.clone().negate(), right = new THREE.Vector3().crossVectors(fw, upT);
+    this.body.visible = !firstPerson;
+    place(this.body, P.hip, P.neck, back, TORSO);
+    const up = P.neck.clone().sub(P.hip).normalize();
+    // Arms: the elbow bends down, back and out from the line between shoulder and hand.
+    const elbows = [];
+    for (const [A, sh, hk, side] of [[this.arms[0], P.shR, P.handR, 1], [this.arms[1], P.shL, P.handL, -1]]) {
+      const on = !cut(A.key); A.upper.visible = A.fore.visible = A.hand.visible = on; elbows.push(null);
+      if (!on) continue;
+      const pole = back.clone().multiplyScalar(0.5).addScaledVector(right, 0.55 * side).addScaledVector(upT, -0.7), el = elbowAt(sh, hk, pole);
+      place(A.upper, sh, el, pole, UPPER_ARM); place(A.fore, el, hk, pole, FOREARM);
+      A.hand.position.copy(hk); A.hand.quaternion.copy(A.fore.quaternion);
+      elbows[elbows.length - 1] = el;
     }
-    for (const [arm, hand, key, sh, hk] of [[this.armR, this.handR, 'armR', P.shR, P.handR], [this.armL, this.handL, 'armL', P.shL, P.handL]]) {
-      const vamb = arm === this.armR ? this.vambR : this.vambL;
-      arm.visible = hand.visible = vamb.visible = !cut(key);
-      if (!cut(key)) { seg(arm, sh, hk); seg(vamb, sh.clone().lerp(hk, 0.5), hk.clone().lerp(sh, 0.08)); hand.position.copy(hk); hand.quaternion.copy(arm.quaternion); }
-    }
+    // Shoulder plates sit on the body, tipped a little toward wherever the arm is reaching.
+    [[this.pauldR, 'armR', P.shR, elbows[0]], [this.pauldL, 'armL', P.shL, elbows[1]]].forEach(([pd, key, sh, el]) => {
+      pd.visible = !firstPerson && !cut(key); if (!pd.visible) return;
+      pd.position.copy(sh).addScaledVector(up, 0.01); pd.quaternion.copy(this.body.quaternion);
+      const down = up.clone().negate(), d = el.clone().sub(sh).normalize();
+      pd.quaternion.premultiply(_tilt.setFromUnitVectors(down, down.clone().lerp(d, 0.15).normalize()));
+    });
     // Boxing: both hands are clenched fists. The punching one is the weapon; the other follows its forearm.
     const boxing = p.weapon === 'fists' && !!swordArm(p), puncher = boxing ? punchHand(p) : null, other = puncher === 'armR' ? 'armL' : 'armR';
     this.offFist.visible = false;
     if (boxing) {
-      this.handR.visible = this.handL.visible = false;
+      for (const A of this.arms) A.hand.visible = false;
       if (!cut(other)) {
-        const arm = other === 'armR' ? this.armR : this.armL;
-        this.offFist.visible = !wheel.hiding(); this.offFist.position.copy(other === 'armR' ? P.handR : P.handL); this.offFist.quaternion.copy(arm.quaternion);
+        const A = this.arms[other === 'armR' ? 0 : 1];
+        this.offFist.visible = !wheel.hiding(); this.offFist.position.copy(other === 'armR' ? P.handR : P.handL); this.offFist.quaternion.copy(A.fore.quaternion);
       }
     }
     [['legR', 'hipR', 'kneeR', 'footR'], ['legL', 'hipL', 'kneeL', 'footL']].forEach(([key, h, kn, ft], i) => {
       // In first person your legs are hidden, except the one you're kicking with, so you see the kick land.
       const kickLeg = cut('legR') ? 'legL' : 'legR', on = (!firstPerson || (p.state === 'kick' && key === kickLeg)) && !cut(key);
       const L = this.legs[i];
-      L.thigh.visible = L.shin.visible = L.boot.visible = this.knees[i].visible = on;
-      if (on && firstPerson) L.thigh.visible = this.knees[i].visible = false; // the thigh would fill the screen
+      L.thigh.visible = L.shin.visible = L.boot.visible = L.knee.visible = on;
+      if (on && firstPerson) L.thigh.visible = L.knee.visible = false; // the thigh would fill the screen
       if (!on) return;
-      seg(L.thigh, P[h], P[kn]); seg(L.shin, P[kn], P[ft].clone().lerp(P[kn], 0.1));
-      this.knees[i].position.copy(P[kn]).addScaledVector(new THREE.Vector3(sk.f[0], 0, sk.f[2]).applyQuaternion(tq), 0.04);
-      L.boot.position.copy(P[ft]).add(new THREE.Vector3(sk.f[0] * 0.06, 0.05, sk.f[2] * 0.06).applyQuaternion(tq)); L.boot.quaternion.setFromAxisAngle(UP, p.yaw).premultiply(tq);
+      place(L.thigh, P[h], P[kn], back, THIGH);
+      place(L.shin, P[kn], P[ft].clone().lerp(P[kn], 0.12), back, SHIN);
+      L.knee.position.copy(P[kn]); L.knee.quaternion.copy(L.shin.quaternion);
+      L.boot.position.copy(P[ft]); L.boot.quaternion.setFromAxisAngle(UP, p.yaw).premultiply(tq);
     });
     [['head', P.neck], ['armR', P.shR], ['armL', P.shL], ['legR', P.hipR], ['legL', P.hipL]].forEach(([k, pos], i) => {
       const s = this.stumps[i]; s.visible = cut(k) && !(firstPerson && (k === 'head' || k.startsWith('leg'))); if (!s.visible) return;
@@ -901,11 +863,11 @@ function spawnGib(ev) {
   let radius = 0.08;
   if (kind === 'head') { g.add(makeHead(TEAM[ev.color], true)); radius = HEAD_R; g.rotation.y = ev.yaw; }
   else {
-    const len = kind === 'arm' ? ARM : LEG;
-    const limb = new THREE.Mesh(kind === 'arm' ? GEO.arm : GEO.leg, MAT.mail);
-    limb.scale.y = len; limb.position.y = -len / 2; limb.castShadow = true; g.add(limb);
+    // The limb's plates laid end to end, hanging down from the cut.
+    const arm = kind === 'arm', len = arm ? ARM : LEG, piece = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = Math.PI; m.position.y = y; m.castShadow = true; g.add(m); return m; };
+    if (arm) { piece(KG.upperArm, MAT.plate, len / 2); piece(KG.forearm, MAT.plate, len / 2 - UPPER_ARM); piece(KG.gauntlet, MAT.plate, -len / 2); }
+    else { piece(KG.cuisse, MAT.plate, len / 2); piece(KG.thighMail, MAT.mail, len / 2); piece(KG.greave, MAT.plate, len / 2 - THIGH); const b = piece(KG.sabaton, MAT.plate, -len / 2); b.rotation.x = 0; piece(KG.sole, MAT.boot, -len / 2).rotation.x = 0; }
     const st = new THREE.Mesh(GEO.stump, MAT.stump); st.position.y = len / 2; g.add(st);
-    const end = new THREE.Mesh(kind === 'arm' ? GEO.hand : GEO.boot, kind === 'arm' ? MAT.steel : MAT.darkSteel); end.position.y = -len / 2; g.add(end);
     if (ev.sword) { const s = makeWeapon(ev.weapon); s.position.y = -len / 2; s.rotation.z = Math.PI / 2; g.add(s); }
   }
   g.position.copy(V(ev.pos)); scene.add(g);
@@ -1800,5 +1762,15 @@ const audio = {
 };
 
 // For automated testing: ?debug exposes a couple of hooks.
+// gallery(): every weapon stood in a row at the edge of the arena, for close-up screenshots. Returns
+// where each one stands.
+let galleryGroup = null;
+function showGallery() {
+  if (galleryGroup) scene.remove(galleryGroup);
+  const g = galleryGroup = new THREE.Group(), ids = Object.keys(WEAPONS).filter((k) => k !== 'fists'), at = {};
+  ids.forEach((k, i) => { const w = makeWeapon(k); w.position.set((i - (ids.length - 1) / 2) * 0.34, k === 'halberd' || k === 'scythe' ? 0.4 : 0.55, 0); g.add(w); at[k] = [w.position.x, w.position.y]; });
+  g.position.set(0, 0, 6); scene.add(g);
+  return Object.fromEntries(Object.entries(at).map(([k, [x, y]]) => [k, [x, y, 6]]));
+}
 let debugCam = null, debugPose = null;
-if (params.has('debug')) window.duel = { renderer, set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get view() { return lastView; }, get pred() { return pred; }, get net() { return netBuffer; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
+if (params.has('debug')) window.duel = { renderer, gallery: showGallery, set cam(c) { debugCam = c; }, set pose(o) { debugPose = o; }, get dir() { return dir; }, send, look, camera, scene, get state() { return cur; }, get view() { return lastView; }, get pred() { return pred; }, get net() { return netBuffer; }, get fx() { return { hurtFlash, shake, fightFlash }; } };
