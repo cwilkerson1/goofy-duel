@@ -8,7 +8,7 @@
 //   which swings slower, recovers slower, hits half again as hard and staggers through a block.
 // - Block by holding block and moving the mouse toward the side the attack comes from.
 // - Feint (Q, or block) to cancel an attack: any time while winding up, or early in the swing itself
-//   before it connects. Kick is unblockable and interrupts.
+//   before it connects. Kick is unblockable, lunges a step in, and knocks you down.
 // - Sprint (Shift) when idle and moving forward; it burns stamina.
 // - Attacking into an incoming swing from the matching side, just in time, is a chamber.
 
@@ -33,7 +33,8 @@ export const T = {
   COMBO_AT: 0.5,     // from this far through a normal recovery you can wind up the next attack    // a swing can still be cancelled during this first fraction of it, if it hasn't hit yet
   CHAMBER: 0.14,     // a fresh swing this young chambers an incoming one from the matching side
   KICK: 0.42, KICK_HIT: [0.12, 0.26],
-  KICK_MISS: 0.65,   // stumble after kicking nothing
+  KICK_MISS: 0.45,   // stumble after kicking nothing
+  KICK_LUNGE: 3.4,   // m/s: kicking drives you forward a step, so it reaches about as far as a sword
 };
 // The weapon wheel. Every round each fighter gets one at random (weight = slice size).
 // len: blade reach in metres. dmg: overall damage. sever: extra damage to limbs and heads.
@@ -114,7 +115,7 @@ export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' &
 export const BLEED = { fresh: 1.2, trickle: 0.4, ease: 0.05 };
 // Bruising from blunt hits, in health per second: it throbs at first, then eases to a dull ache.
 export const BRUISE = { perDamage: 0.03, linger: 0.3, ease: 0.05 };
-export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 65, kickMin: 40, feint: 6, swingFeint: 10, jump: 6, sprint: 14 };
+export const COST = { swing: 12, heavy: 20, block: 10, blockHeavy: 25, kick: 40, kickMin: 30, feint: 6, swingFeint: 10, jump: 6, sprint: 14 };
 
 // Directions name the side the weapon is drawn back on, from the attacker's point of view.
 // The blade arrives on the defender's opposite side, so they block with the mirrored direction.
@@ -154,6 +155,8 @@ export function moveGoal(p, mf, ms, yaw, blocking, sprint) {
   else if (p.state !== 'idle' || blocking) speed *= 0.5;
   if (p.stun > 0 || p.downT > 0) speed = 0;
   const f = forward(yaw), r = rightOf(yaw), fw = mf > 0 ? mf : mf * 0.65, sd = ms * 0.8;
+  // A kick steps in behind it until the foot lands, whatever the movement keys say.
+  if (p.state === 'kick' && p.st < T.KICK_HIT[1] && !(p.stun > 0) && !(p.downT > 0)) return { vx: f[0] * T.KICK_LUNGE, vz: f[2] * T.KICK_LUNGE, moving: false, sprinting: false };
   let mx = f[0] * fw + r[0] * sd, mz = f[2] * fw + r[2] * sd;
   const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
   return { vx: mx * speed, vz: mz * speed, moving: ml > 0.1, sprinting: sprinting && ml > 0.1 };
@@ -628,7 +631,7 @@ function resolveSwing(room, att, def) {
     // Kicks can't be blocked: they knock you flat on your back, and you have to get up again,
     // which leaves you open to a free hit.
     att.hitDone = true;
-    def.parts.torso.hp -= 6; def.blocking = false; interrupt(def, 0.3);
+    def.parts.torso.hp -= 10; def.stam = Math.max(0, def.stam - 25); def.blocking = false; interrupt(def, 0.3);
     if (def.state === 'kick') def.state = 'idle';
     def.downT = 1e-3; def.fallYaw = att.yaw;
     const fa = forward(att.yaw); def.vx += fa[0] * 3; def.vz += fa[2] * 3;
