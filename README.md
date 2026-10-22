@@ -87,6 +87,12 @@ anyone who turtles. Its settings are at the top of `bot.js`.
 *their* right arrives on *your* left. The only glow is white, when their attack has become a heavy.
 Once they start drawing back, their side is locked in; the only way to change it is to feint and start again.
 
+**Drag and accel.** Once a swing is on its way, turn your view to change when it lands. Turning the
+same way the blade is travelling (to your right for a left swing, to your left for a right swing,
+down for an overhead) speeds it up by up to 30%. Turning against it slows it down by up to 35%, or 45%
+for a heavy, which drains stamina while you hold it back. Use it to beat a guard that went up too
+early, or to land a beat before they expect.
+
 **Chaining swings.** You don't have to wait for a swing to fully finish: click again while it's still going and the next attack starts the moment it can, halfway through the recovery. Move the mouse toward a side as you click to pick it, so right-then-left combos flow. (A swing that got parried still has its full recovery.)
 
 **The rhythm.** A clean block bounces their swing back into a long recovery, so your answer comes at

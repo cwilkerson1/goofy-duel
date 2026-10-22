@@ -33,6 +33,11 @@ export const T = {
   CHAMBER: 0.14,     // a fresh swing this young chambers an incoming one from the matching side
   KICK: 0.42, KICK_HIT: [0.12, 0.26],
   KICK_MISS: 0.65,   // stumble after kicking nothing
+  // Drag and accel: turning your view along a swing's path speeds it up, turning against it slows it
+  // down, so you can make it land a little early or late. PACE_PER is how much each rad/s of turn
+  // changes the speed; the swing never goes faster than PACE_MAX or slower than PACE_MIN (heavies drag
+  // further). Dragging costs DRAG_STAM stamina per second at full drag.
+  PACE_PER: 0.11, PACE_MAX: 1.3, PACE_MIN: 0.65, PACE_MIN_HEAVY: 0.55, DRAG_STAM: 20,
 };
 // The weapon wheel. Every round each fighter gets one at random (weight = slice size).
 // len: blade reach in metres. dmg: overall damage. sever: extra damage to limbs and heads.
@@ -540,13 +545,28 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
   else if (hadSword && swordArm(def)) room.events.push({ t: 'quip', id: def.id, kind: 'spare' });
 }
 
+// How fast you're turning along the way your swing travels, in rad/s (+ with it, - against it).
+// Looking updates arrive in bursts, so this is smoothed over a few ticks.
+function trackTurn(p, yaw0, pitch0, dt) {
+  const dyaw = Math.atan2(Math.sin(p.yaw - yaw0), Math.cos(p.yaw - yaw0)), dpitch = p.pitch - pitch0;
+  // A left swing sweeps to your right (turning right lowers yaw), a right swing to your left, an overhead down.
+  const along = p.state !== 'active' ? 0 : p.sdir === 'left' ? -dyaw : p.sdir === 'right' ? dyaw : -dpitch;
+  p.turnW = (p.turnW || 0) + (along / dt - (p.turnW || 0)) * (1 - Math.exp(-dt / 0.08));
+  if (p.state !== 'active') p.turnW = 0;
+}
+function swingPace(p, dt) {
+  const pace = clamp(1 + T.PACE_PER * (p.turnW || 0), p.heavy ? T.PACE_MIN_HEAVY : T.PACE_MIN, T.PACE_MAX);
+  if (pace < 1) { p.stam = Math.max(0, p.stam - T.DRAG_STAM * (1 - pace) / (1 - T.PACE_MIN_HEAVY) * dt); p.stamWait = Math.max(p.stamWait || 0, 0.3); }
+  p.pace = pace;
+  return pace;
+}
 function stepPlayer(room, p, dt) {
   if (p.dead) {
     p.deathT += dt;
     // Dead weight: the body just slides to a stop where it fell.
     const k = Math.pow(0.002, dt); p.vx *= k; p.vz *= k;
   } else {
-    p.st += dt; p.cd = Math.max(0, p.cd - dt); p.flinch = Math.max(0, p.flinch - dt);
+    p.st += p.state === 'active' ? dt * swingPace(p, dt) : dt; p.cd = Math.max(0, p.cd - dt); p.flinch = Math.max(0, p.flinch - dt);
     if (p.stun > 0) { p.stun = Math.max(0, p.stun - dt); if (p.stun === 0) p.staggered = false; }
     if (p.downT > 0) { p.downT += dt; if (p.downT >= DOWN.fall + DOWN.lie + DOWN.rise) p.downT = 0; }
     const blockPressed = p.input.b && !p.prevB;
@@ -557,7 +577,7 @@ function stepPlayer(room, p, dt) {
       if (p.st >= T.MAX_HOLD) p.release = true;
       if (p.release && p.st >= tm(p, 'DRAW')) {
         p.heavy = p.st >= tm(p, 'HEAVY_AT'); p.saim = p.pitch / D2R;
-        p.state = 'active'; p.st = 0; p.hitDone = false;
+        p.state = 'active'; p.st = 0; p.hitDone = false; p.pace = 1;
         spend(p, (p.heavy ? COST.heavy : COST.swing) * wpn(p).stam);
         room.events.push({ t: 'swing', id: p.id, dir: p.sdir, heavy: p.heavy });
       }
@@ -694,8 +714,10 @@ export function stepRoom(room, dt) {
   for (const p of fighters) {
     const frozen = room.phase === 'countdown' || room.phase === 'spin';
     if (!p.dead && !frozen) {
+      const yaw0 = p.yaw, pitch0 = p.pitch;
       if (Number.isFinite(p.input.yaw)) p.yaw = p.input.yaw;
       if (Number.isFinite(p.input.pitch)) p.pitch = p.input.pitch;
+      trackTurn(p, yaw0, pitch0, dt);
     }
     if (frozen) { p.vx = p.vz = 0; continue; }
     stepPlayer(room, p, dt);
