@@ -1,5 +1,5 @@
 // Client-side prediction of your own movement. Kept apart from client.js so it can be tested in Node.
-import { ARENA_R, legsLeft, COST, moveGoal, ACCEL, STRIDE } from './sim.js';
+import { ARENA_R, legsLeft, COST, moveGoal, ACCEL, STRIDE, mod } from './sim.js';
 
 // Your knight moves on your screen the moment you press a key, using the same movement rules as the
 // server, and quietly eases toward where the server says you are. So your own view never waits on
@@ -32,7 +32,7 @@ export function makePredictor() {
     this.vz += (goal.vz - this.vz) * Math.min(1, accel * dt);
     if (this.onGround && legs && inp.j && s.stun <= 0 && !(s.downT > 0) && s.stam >= COST.jump) { this.vy = legs === 2 ? 5.2 : 4; this.onGround = false; }
     else if (this.onGround && legs === 1 && ml > 0.1 && s.state !== 'kick') { this.vy = 2.6; this.onGround = false; }
-    this.vy -= 14 * dt;
+    this.vy -= (mod(s).grav ?? 14) * dt;
     this.x += this.vx * dt; this.y += this.vy * dt; this.z += this.vz * dt;
     if (this.y <= 0) { this.y = 0; this.vy = 0; this.onGround = true; }
     // Ease out the server's correction, moving the recorded path along with it so it isn't counted twice.

@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 import { buildWeapon, knightGeometry, UPPER_ARM, FOREARM, THIGH, SHIN } from '/models.js';
 
@@ -1539,6 +1539,8 @@ function drawHud(players, me, opp) {
     text(copiedAt && performance.now() - copiedAt < 2500 ? 'Invite link copied! Send it to a friend.' : 'Press C to copy an invite link', w / 2, h * 0.32 + 70, 18, '#fff');
   } else if (cur.phase !== 'fight') text(cur.msg, w / 2, h * 0.32, cur.phase === 'roundEnd' ? 46 : 34, cur.phase === 'roundEnd' ? '#ffd23f' : '#fff');
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
+  // A round with a special rule keeps a reminder at the top of the screen.
+  { const M = roundMod(); if (M !== MODS.none && cur.phase !== 'waiting' && !(cur.phase === 'spin' || wheel.visible())) text(`${M.emoji} ${M.name}`, w / 2, 84, 18, '#7dff9a'); }
   if (joined && !locked() && !menu.isOpen()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
   hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block · Q feint · F kick · Esc settings', w / 2, h - 14);
@@ -1563,7 +1565,7 @@ const wheel = (() => {
       // Rotate so `inside` ends under the pointer, after several full turns.
       const target = POINTER - inside, turns = 6 + Math.floor(Math.random() * 3);
       const base = angle - (angle % (Math.PI * 2));
-      st = { t0: performance.now(), dur: (ev.dur - 1.3) * 1000, from: angle, to: base + turns * Math.PI * 2 + target, mine, result: ev.result, landed: false };
+      st = { t0: performance.now(), dur: (ev.dur - 1.3) * 1000, from: angle, to: base + turns * Math.PI * 2 + target, mine, result: ev.result, mod: MODS[ev.mod] || MODS.none, landed: false };
       audio.drumroll(st.dur / 1000);
     },
     visible() { return st && performance.now() - st.t0 < st.dur + 1300; },
@@ -1583,7 +1585,12 @@ const wheel = (() => {
       const R = Math.min(w, h) * 0.3, cx = w / 2, cy = h * 0.47;
       hctx.fillStyle = 'rgba(20,12,35,0.55)'; hctx.fillRect(0, 0, w, h);
       const bob = Math.sin(now / 120) * 4;
-      text('🎡 WHEEL OF WEAPONS 🎡', cx, cy - R - 46 + bob, 38, '#ffd23f');
+      // Once it lands, a special round rule takes over the title so it can't be missed.
+      if (st.landed && st.mod !== MODS.none) {
+        const pop = 1 + Math.max(0, 0.3 - (now - st.t0 - st.dur) / 1000);
+        text(`${st.mod.emoji} ${st.mod.name.toUpperCase()} ${st.mod.emoji}`, cx, cy - R - 60, 34 * pop, '#7dff9a');
+        text(st.mod.line, cx, cy - R - 32, 17, '#fff');
+      } else text('🎡 WHEEL OF WEAPONS 🎡', cx, cy - R - 46 + bob, 38, '#ffd23f');
       // Rim with chasing lights.
       hctx.beginPath(); hctx.arc(cx, cy, R + 16, 0, Math.PI * 2); hctx.fillStyle = '#5a3d1e'; hctx.fill();
       for (let i = 0; i < 28; i++) {
@@ -1647,12 +1654,15 @@ let lastView = null; // ?debug only: the players as last drawn
 let last = performance.now(), clock = 0, lastPhase = '', wasHeavy = false;
 // When the duel is won, everyone sees the result for a few seconds and then goes back to the start screen.
 let arenaName = '', copiedAt = 0;
+// The current round's rule, from either fighter (they always share it).
+const roundMod = () => MODS[cur && (cur.players.find(Boolean) || {}).mod] || MODS.none;
 function frame(now) {
   const ft = now - last, dt = Math.max(0, Math.min(0.05, ft / 1000)); last = now; clock += dt;
   netStats.frames++; netStats.worst = Math.max(netStats.worst, ft);
   if (ft > 150) reportHitch('frame', ft);
   if (now - netStats.since > 1000) { netStats.fps = netStats.frames; netStats.worstShown = netStats.worst; netStats.frames = 0; netStats.worst = 0; netStats.since = now; }
   const players = interpPlayers().slice();
+  { const d = roundMod().fog && cur.phase !== 'spin' ? 0.14 : 0.02; scene.fog.density += (d - scene.fog.density) * Math.min(1, dt * 1.5); } // fog rolls in and out
   let me = players.find((p) => p && p.id === myId) || null;
   const opp = players.find((p) => p && p.id !== myId) || null;
   if (me && pred.on && !me.dead) {

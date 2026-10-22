@@ -94,6 +94,28 @@ export const BLUNT = new Set(['hammer', 'mace', 'flail', 'fists']);
 // Where the best part of a weapon sits, handy for tuning reach.
 const sweetDist = (id) => { const z = HITBOX[id].reduce((a, b) => (b.m > a.m ? b : a)); return (z.a[1] + z.b[1]) / 2; };
 export const SPIN_TIME = 5.5;
+// Round rules: the wheel also rolls one of these each round, for both fighters (weight = how often).
+// dmg: damage multiplier. headCap: replaces HEAD_CAP. grav: gravity. bleed: bleeding multiplier.
+// tempo: every swing, wind-up and recovery takes this much of its normal time. stam: stamina costs.
+// regen: stamina recovery. fog: thick fog (drawn in the browser). weapon: 'fists' or 'mirror' (both the same).
+export const MODS = {
+  none:     { w: 6, emoji: '⚔️', name: 'Standard Rules', line: 'No tricks this round.' },
+  lowgrav:  { w: 2, emoji: '🌙', name: 'Moon Gravity', line: 'Jump high, fall slow.', grav: 5 },
+  glass:    { w: 2, emoji: '🍷', name: 'Glass Knights', line: 'Everything hits twice as hard. A clean head shot kills.', dmg: 2, headCap: 1.2 },
+  bleed:    { w: 2, emoji: '🩸', name: 'Bloodbath', line: 'Wounds bleed three times as fast.', bleed: 3 },
+  fog:      { w: 2, emoji: '🌫️', name: 'Pea Soup', line: 'Thick fog. Watch for the glint of steel.', fog: true },
+  fists:    { w: 1, emoji: '👊', name: 'Bare Knuckle', line: 'Weapons are banned. Fists only.', weapon: 'fists' },
+  mirror:   { w: 2, emoji: '🪞', name: 'Mirror Match', line: 'You both get the same weapon.', weapon: 'mirror' },
+  tireless: { w: 2, emoji: '🫁', name: 'Iron Lungs', line: 'Half stamina costs, triple recovery.', stam: 0.5, regen: 3 },
+  turbo:    { w: 2, emoji: '⚡', name: 'Double Time', line: 'Everything swings 30% faster.', tempo: 0.7 },
+};
+export const mod = (p) => MODS[p.mod] || MODS.none;
+export function rollMod() {
+  const ks = Object.keys(MODS), total = ks.reduce((t, k) => t + MODS[k].w, 0);
+  let r = Math.random() * total;
+  for (const k of ks) { r -= MODS[k].w; if (r <= 0) return k; }
+  return 'none';
+}
 export function rollWeapon() {
   const total = WHEEL.reduce((t, k) => t + WEAPONS[k].weight, 0);
   let r = Math.random() * total;
@@ -111,7 +133,7 @@ const HEAVY_TIME = { ACTIVE: 1.35, RECOVER: 1.2, CHAMBER: 1.35 };
 // Overall swing pace: every weapon's wind-up, swing and recovery is this much slower than its table
 // value, and the small ones (dagger, fists) a bit less so. The heavy-attack charge keeps its own timing.
 export const PACE = 1.5, SMALL_PACE = 1.2;
-export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' && PHASE[k] ? (wpn(p).small ? SMALL_PACE : PACE) : 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) // weapon-scaled timing
+export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' && PHASE[k] ? (wpn(p).small ? SMALL_PACE : PACE) : 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) * (mod(p).tempo ?? 1) // weapon-scaled timing
   * (p.heavy && p.state !== 'hold' ? HEAVY_TIME[k] ?? 1 : 1);
 
 // Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
@@ -457,7 +479,7 @@ export function resetFighter(p, side) {
   p.spawnSeq = (p.spawnSeq || 0) + 1; // tells the client to snap its camera to the new spawn
 }
 
-const spend = (p, n) => { p.stam = Math.max(0, p.stam - n); p.stamWait = 0.7; };
+const spend = (p, n) => { p.stam = Math.max(0, p.stam - n * (mod(p).stam ?? 1)); p.stamWait = 0.7; };
 const canAct = (p) => !p.dead && p.stun <= 0 && !(p.downT > 0);
 
 // Start drawing the weapon back. The direction can still change until release.
@@ -601,7 +623,7 @@ function stepPlayer(room, p, dt) {
     p.blocking = !!p.input.b && p.state === 'idle' && p.stun <= 0 && !(p.downT > 0);
 
     if (p.stamWait > 0) p.stamWait -= dt;
-    else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * dt);
+    else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * (mod(p).regen ?? 1) * dt);
 
     const legs = legsLeft(p);
     const goal = moveGoal(p, p.input.mf, p.input.ms, p.yaw, p.blocking, p.input.s), ml = goal.moving ? 1 : 0;
@@ -617,11 +639,11 @@ function stepPlayer(room, p, dt) {
       p.vy = 2.6; p.onGround = false; // one leg left: hop everywhere
       room.events.push({ t: 'hop', id: p.id });
     }
-    if (p.bleed) { p.bleed = Math.max((p.wounds || 0) * BLEED.trickle, p.bleed - BLEED.ease * dt); p.parts.torso.hp -= p.bleed * dt; }
+    if (p.bleed) { p.bleed = Math.max((p.wounds || 0) * BLEED.trickle, p.bleed - BLEED.ease * dt); p.parts.torso.hp -= p.bleed * (mod(p).bleed ?? 1) * dt; }
     if (p.bruise) { p.bruise = Math.max(p.bruiseAche || 0, p.bruise - BRUISE.ease * dt); p.parts.torso.hp -= p.bruise * dt; } // internal bruising from blunt hits
     if (p.parts.torso.hp <= 0) { p.parts.torso.hp = 0; kill(room, p, p.bleed >= (p.bruise || 0) ? 'bled out' : 'bruised to death'); }
   }
-  p.vy -= 14 * dt;
+  p.vy -= (mod(p).grav ?? 14) * dt;
   p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
   if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
   const d = Math.hypot(p.x, p.z), maxR = ARENA_R - 0.5;
@@ -704,8 +726,8 @@ function resolveSwing(room, att, def) {
   const n = [def.x - att.x, def.z - att.z], nl = Math.hypot(...n) || 1;
   const closing = ((att.vx - def.vx) * n[0] + (att.vz - def.vz) * n[1]) / nl;
   const W = wpn(att);
-  let dmg = DMG_SCALE * rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * (oneHanding(att) ? 0.7 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35);
-  if (part === 'head') dmg = Math.min(dmg, PART_MAX.head * HEAD_CAP); // no single blow to the head kills
+  let dmg = DMG_SCALE * rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * (oneHanding(att) ? 0.7 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35) * (mod(att).dmg ?? 1);
+  if (part === 'head') dmg = Math.min(dmg, PART_MAX.head * (mod(att).headCap ?? HEAD_CAP)); // no single blow to the head kills
   damage(room, att, def, part, dmg, skd, w);
 }
 
@@ -770,11 +792,17 @@ export function voteRematch(room, p) {
 function startRound(room, resetScores) {
   room.fighters.forEach((p, i) => { if (p) { resetFighter(p, i); p.rematch = false; if (resetScores) p.score = 0; } });
   // Spin the wheel of fortune for everyone's weapon this round.
-  const result = {};
-  room.fighters.forEach((p) => { if (p) { p.weapon = WEAPONS[room.forceWeapon] ? room.forceWeapon : rollWeapon(); result[p.id] = p.weapon; } });
+  // ...and the round's rule (room.forceMod pins one, for testing).
+  room.mod = MODS[room.forceMod] ? room.forceMod : rollMod();
+  const M = MODS[room.mod], shared = rollWeapon(), result = {};
+  room.fighters.forEach((p) => { if (p) {
+    p.mod = room.mod;
+    p.weapon = WEAPONS[room.forceWeapon] ? room.forceWeapon : M.weapon === 'fists' ? 'fists' : M.weapon === 'mirror' ? shared : rollWeapon();
+    result[p.id] = p.weapon;
+  } });
   room.phase = 'spin'; room.timer = SPIN_TIME; room.msg = 'Spinning the Wheel of Weapons…';
   room.song = Math.floor(Math.random() * 1e9); // everyone's browser plays the same fight track from this
-  room.events.push({ t: 'round' }, { t: 'spin', result, dur: SPIN_TIME });
+  room.events.push({ t: 'round' }, { t: 'spin', result, mod: room.mod, dur: SPIN_TIME });
 }
 
 export function newRoom(name) {
@@ -789,7 +817,7 @@ export function snapshotPlayer(p) {
     heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), staggered: p.stun > 0 && p.staggered, stam: Math.round(p.stam),
     ack: p.ack || 0, queued: !!p.queued,
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
-    weapon: p.weapon, walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
+    weapon: p.weapon, mod: p.mod || 'none', walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),
   };
 }
