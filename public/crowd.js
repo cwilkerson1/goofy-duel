@@ -173,6 +173,12 @@ export function makeCrowdVoice(audio, sfx) {
         voice(t + rnd(0, 0.35), { f0, f1: f0 * rnd(1.05, 1.35), vowel: pick(['ah', 'eh', 'ah', 'oh']), dur: d, vol: 0.022 * size, attack: 0.15, pan: rnd(-1, 1) });
       });
     },
+    // A fighter bellowing a taunt: one big voice, close by.
+    yell(low = true) {
+      if (!ok() || sfx.play('taunt', 0.7)) return; const t = ctx().currentTime, f0 = low ? rnd(105, 135) : rnd(200, 250);
+      voice(t, { f0, f1: f0 * rnd(1.15, 1.35), vowel: pick(['ah', 'oh', 'eh']), dur: rnd(0.55, 0.8), vol: 0.09, attack: 0.04, vib: 6 });
+      voice(t, { f0: f0 * 1.005, f1: f0 * rnd(1.15, 1.35), vowel: 'ah', dur: 0.7, vol: 0.05, attack: 0.05, vib: 4 });
+    },
     // A few people screaming in horror.
     scream() {
       if (!ok() || sfx.play('scream', 0.5)) return; const t = ctx().currentTime;

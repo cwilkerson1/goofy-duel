@@ -34,6 +34,7 @@ export const T = {
   CHAMBER: 0.14,     // a fresh swing this young chambers an incoming one from the matching side
   KICK: 0.42, KICK_HIT: [0.12, 0.26],
   KICK_MISS: 0.65,   // stumble after kicking nothing
+  TAUNT: 1.2, TAUNT_CD: 4, // a taunt leaves you open (no attacking or blocking) for this long
   // Drag and accel: turning your view along a swing's path speeds it up, turning against it slows it
   // down, so you can make it land a little early or late. PACE_PER is how much each rad/s of turn
   // changes the speed; the swing never goes faster than PACE_MAX or slower than PACE_MIN (heavies drag
@@ -214,6 +215,7 @@ export function swordLocal(p) {
   if (p.weapon === 'fists' && p.stun <= 0) return fistLocal(p);
   if (p.stun > 0) return swingPose(140 + Math.sin(p.stun * 40) * 30, 60);
   if (p.blocking) return { hand: BLOCK[p.gdir][0], dir: norm(BLOCK[p.gdir][1]) };
+  if (p.state === 'taunt') return mix(guardPose(p), tauntPose(p), tauntBlend(p));
   // Kicking: the weapon arm swings out wide for balance, clearing the view of the kick.
   if (p.state === 'kick') return mix(guardPose(p), { hand: [0.12, 0.5, -0.12], dir: norm([0.35, 0.75, 0.45]) }, kickCurve(p).knee);
   const s = SWING[p.sdir];
@@ -240,6 +242,15 @@ export function swordLocal(p) {
   }
   return guardPose(p);
 }
+// Taunts: 0 raises the weapon high and shakes it at the sky, 1 points it at the opponent and beckons
+// them on, 2 twirls it in a flashy circle out to the side.
+const tauntBlend = (p) => { const u = p.st / T.TAUNT; return ease(clamp(Math.min(u / 0.2, (1 - u) / 0.2), 0, 1)); };
+function tauntPose(p) {
+  const t = p.st, k = p.tauntKind || 0;
+  if (k === 0) return swingPose(-8 + 6 * Math.sin(t * 9), 118 + 14 * Math.sin(t * 16));
+  if (k === 1) return swingPose(-6 + 4 * Math.sin(t * 7), 12 + 18 * Math.max(0, Math.sin(t * 9)));
+  const a = t * 11; return swingPose(70 + 40 * Math.cos(a), 30 + 50 * Math.sin(a));
+}
 // Bare fists box instead of swinging a weapon. Hands up by the chin at guard; an overhead attack is a
 // straight right; a side attack is a hook thrown with the hand on that side, so a left is a left hook.
 // Poses are worked out for the right hand and mirrored for the left. dir is the way the knuckles face.
@@ -259,6 +270,7 @@ function fistLocal(p) {
   let q;
   if (p.blocking) q = { hand: [0.3, 0.1, 0.02], dir: norm([0.25, -0.1, 1]) }; // forearms up in front of the face
   else if (p.state === 'kick') q = g;
+  else if (p.state === 'taunt') q = mix(g, jabOut(65 + 12 * Math.sin(p.st * 16)), tauntBlend(p)); // a fist pumped at the sky
   else {
     const straight = p.sdir === 'over', aim = (deg) => clamp(deg, -60, 30) * 0.9 + 4;
     const wound = (hk, deg) => (straight ? jabBack(hk) : hookPose(55 + 15 * hk, aim(deg) * 0.6));
@@ -519,6 +531,28 @@ export function kick(p, room) {
   room.events.push({ t: 'kickSwing', id: p.id });
   return true;
 }
+// Taunting: play to the crowd. For TAUNT seconds you can't attack, block or kick, so it's a gamble, but
+// the crowd loves it: you get some stamina back from the roar, the crowd turns on your opponent (they
+// throw more at whoever they like less), and taunting someone who's beaten gets them pelted at once.
+export const TAUNT_LINES = ['Is that all you\'ve got?', 'Come on then!', 'Too slow!', 'Bow before me!', 'My grandmother swings harder!', 'Are you even trying?', 'Next!', 'Hold still!', 'Ha!'];
+export const beaten = (p) => p.downT > 0 || p.stun > 0 || PARTS.filter((k) => p.parts[k].cut).length >= 2 || p.parts.torso.hp < 35;
+export function taunt(p, room) {
+  if (!canAct(p) || p.state !== 'idle' || p.blocking || !p.onGround || (p.tauntCd || 0) > 0) return false;
+  const op = room.fighters.find((f) => f && f !== p);
+  const down = !!op && !op.dead && beaten(op);
+  p.state = 'taunt'; p.st = 0; p.tauntKind = Math.floor(Math.random() * 3); p.tauntCd = T.TAUNT_CD; p.queued = null;
+  p.stam = Math.min(STAM_MAX, p.stam + (down ? 25 : 15));
+  const fav = (room.favour ||= {});
+  fav[p.id] = clamp((fav[p.id] || 0) + (down ? 0.6 : 0.35), -1, 1);
+  if (op) fav[op.id] = clamp((fav[op.id] || 0) - 0.25, -1, 1);
+  room.events.push({ t: 'taunt', id: p.id, kind: p.tauntKind, line: Math.floor(Math.random() * TAUNT_LINES.length), beaten: down });
+  // Taunt someone who's down and the crowd piles on.
+  if (down) for (let i = 0; i < 3; i++) {
+    const a = Math.atan2(op.z, op.x) + rand(-1.2, 1.2);
+    toss(room, randomThrown(), seatAt(a), [op.x + rand(-0.5, 0.5), 1.1, op.z + rand(-0.5, 0.5)], null);
+  }
+  return true;
+}
 // Old one-shot attack: hold and release in one go (used by tests and simple clients).
 export function tryAttack(p, dir) { if (startHold(p, dir)) { releaseHold(p); return true; } return false; }
 
@@ -531,7 +565,7 @@ function kill(room, p, how, fallYaw) {
 }
 // Taking a hit cancels whatever you were winding up and briefly stops you attacking.
 function interrupt(p, flinch) {
-  if (p.state === 'hold' || p.state === 'active') { p.state = 'idle'; p.st = 0; }
+  if (p.state === 'hold' || p.state === 'active' || p.state === 'taunt') { p.state = 'idle'; p.st = 0; }
   p.flinch = Math.max(p.flinch, flinch);
 }
 
@@ -590,7 +624,7 @@ function stepPlayer(room, p, dt) {
     // Dead weight: the body just slides to a stop where it fell.
     const k = Math.pow(0.002, dt); p.vx *= k; p.vz *= k;
   } else {
-    p.st += p.state === 'active' ? dt * swingPace(p, dt) : dt; p.cd = Math.max(0, p.cd - dt); p.flinch = Math.max(0, p.flinch - dt);
+    p.st += p.state === 'active' ? dt * swingPace(p, dt) : dt; p.cd = Math.max(0, p.cd - dt); p.tauntCd = Math.max(0, (p.tauntCd || 0) - dt); p.flinch = Math.max(0, p.flinch - dt);
     if (p.stun > 0) { p.stun = Math.max(0, p.stun - dt); if (p.stun === 0) p.staggered = false; }
     if (p.downT > 0) { p.downT += dt; if (p.downT >= DOWN.fall + DOWN.lie + DOWN.rise) p.downT = 0; }
     const blockPressed = p.input.b && !p.prevB;
@@ -606,6 +640,7 @@ function stepPlayer(room, p, dt) {
         room.events.push({ t: 'swing', id: p.id, dir: p.sdir, heavy: p.heavy });
       }
     } else if (p.state === 'active' && p.st >= tm(p, 'ACTIVE')) { p.state = 'recover'; p.st = 0; p.recDur = tm(p, 'RECOVER'); p.comboOk = true; }
+    else if (p.state === 'taunt' && p.st >= T.TAUNT) { p.state = 'idle'; p.st = 0; }
     else if (p.state === 'recover' && p.st >= p.recDur) { p.state = 'idle'; p.st = 0; p.cd = p.queued ? 0 : 0.05; }
     else if (p.state === 'kick' && p.st >= T.KICK) {
       p.state = 'idle'; p.st = 0; p.cd = 0.1;
@@ -797,7 +832,7 @@ export function voteRematch(room, p) {
 function startRound(room, resetScores) {
   room.fighters.forEach((p, i) => { if (p) { resetFighter(p, i); p.rematch = false; if (resetScores) p.score = 0; } });
   // Spin the wheel of fortune for everyone's weapon this round.
-  room.thrown = [];
+  room.thrown = []; room.favour = {};
   // A fresh arena of traps every round.
   const L = rollLayout(Math.random, room.hz && room.hz.L.kind);
   room.hz = { L, t: 0, plates: L.plates.map(() => null), hit: L.plates.map(() => []) };
@@ -909,8 +944,13 @@ export function randomThrown() {
 function stepThrown(room, fighters, dt) {
   // The crowd throws on its own sometimes, more when there's blood.
   room.crowdHeat = Math.max(0, (room.crowdHeat || 0) - dt * 0.15);
+  for (const id in room.favour || {}) room.favour[id] *= Math.exp(-dt * 0.04); // the crowd forgets, slowly
   if (room.phase === 'fight' && Math.random() < dt * (0.3 + room.crowdHeat * 0.8)) {
-    const f = pick(fighters.filter((p) => !p.dead));
+    // The crowd throws at whoever it likes less (see taunt).
+    const fav = room.favour || {}, alive = fighters.filter((p) => !p.dead);
+    const wts = alive.map((p) => 0.25 + clamp(1 - (fav[p.id] || 0), 0, 2));
+    let r = Math.random() * wts.reduce((a, b) => a + b, 0), f = alive[alive.length - 1];
+    for (let i = 0; i < alive.length; i++) { r -= wts[i]; if (r <= 0) { f = alive[i]; break; } }
     if (f) {
       const a = Math.atan2(f.z, f.x) + rand(-0.9, 0.9);
       toss(room, randomThrown(), seatAt(a), [f.x + f.vx * 0.8 + rand(-1.2, 1.2), 1.2, f.z + f.vz * 0.8 + rand(-1.2, 1.2)], null);
@@ -963,7 +1003,7 @@ export function snapshotPlayer(p) {
     heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), staggered: p.stun > 0 && p.staggered, stam: Math.round(p.stam),
     ack: p.ack || 0, queued: !!p.queued,
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
-    weapon: p.weapon, mod: p.mod || 'none', burn: r2(p.burnT || 0), walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
+    weapon: p.weapon, mod: p.mod || 'none', burn: r2(p.burnT || 0), tk: p.tauntKind || 0, walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),
   };
 }

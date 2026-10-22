@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch, hazardSnapshot, toss, seatAt, THROWN, THROW_EVERY, ARENA_R } from './shared/sim.js';
+import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch, hazardSnapshot, taunt, toss, seatAt, THROWN, THROW_EVERY, ARENA_R } from './shared/sim.js';
 import { makeBot, botThink } from './bot.js';
 import { rtcReady, answerOffer } from './rtc.js';
 
@@ -185,6 +185,7 @@ server.on('upgrade', (req, socket) => {
     else if (m.t === 'release') releaseHold(me);
     else if (m.t === 'kick') kick(me, room);
     else if (m.t === 'feint') feint(me, room);
+    else if (m.t === 'taunt' && room.phase === 'fight') taunt(me, room);
     else if (m.t === 'throw') {
       // Only spectators throw, at most one thing every THROW_EVERY seconds, and only into the arena.
       const now = Date.now(), at = Array.isArray(m.at) && m.at.length === 3 && m.at.every(Number.isFinite) ? m.at : null;

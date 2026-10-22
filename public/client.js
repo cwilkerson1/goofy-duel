@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS, seatAt, STANDS_Y, THROW_EVERY } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS, seatAt, STANDS_Y, THROW_EVERY, TAUNT_LINES } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 import { makeHazardView } from '/hazards.js';
 import { TRAPS } from '/shared/hazards.js';
@@ -1182,6 +1182,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'F3' && !e.repeat) { netStats.show = !netStats.show; e.preventDefault(); }
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
   if (e.code === 'KeyQ' && !e.repeat) feintNow();
+  if (e.code === 'KeyT' && !e.repeat && !spectating()) send({ t: 'taunt' });
   if (spectating() && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) throwKind = ['tomato', 'rock', 'cabbage'][Number(e.code.slice(5)) - 1];
   if (e.code === 'Space') e.preventDefault();
 });
@@ -1355,6 +1356,12 @@ function handleEvent(ev) {
     case 'kickMiss': audio.whoosh('low'); voice().laugh(); if (mine) shake = 0.05; break;
     case 'kick': audio.thud(); setTimeout(() => audio.thud(), 300); voice().laugh(); voice().cheer(0.6); lastAction = performance.now(); // the boot, then the body hitting the floor
       if (mine) { shake = 0.1; hurtFlash = 0.4; } break;
+    case 'taunt':
+      // The taunter bellows; the crowd cheers them and boos the other one (and laughs if they're beaten).
+      voice().yell(); voice().cheer(ev.beaten ? 1.2 : 0.7); if (ev.beaten) voice().laugh(); else voice().boo();
+      crowd.cheer = Math.min(1, crowd.cheer + (ev.beaten ? 0.8 : 0.4)); lastAction = performance.now();
+      bubbles.set(ev.id, { text: TAUNT_LINES[ev.line] || 'Ha!', t: performance.now() });
+      break;
     case 'death': audio.slide(); voice().cheer(1.5); crowd.cheer = 1; break;
     case 'toss': thrown.toss(ev); crowd.view.throwFrom(ev.pos[0], ev.pos[2]); break;
     case 'land': thrown.end(ev.pid); if (ev.kind === 'tomato') { blood.decal(ev.pos[0], ev.pos[2], 0.12); audio.squelch(); } else audio.step(0.3); break;
@@ -1392,6 +1399,21 @@ const splat = (() => {
     },
   };
 })();
+// What a fighter shouts when they taunt, over their head (yours goes above the crosshair).
+const bubbles = new Map();
+function drawBubbles(players, me) {
+  const now = performance.now();
+  for (const [id, b] of bubbles) {
+    if (now - b.t > 2200) { bubbles.delete(id); continue; }
+    const p = players.find((q) => q && q.id === id); if (!p) continue;
+    const pos = id === myId ? [innerWidth / 2, innerHeight / 2 - 50] : project(V(skeleton(p).head).add(new THREE.Vector3(0, 0.55, 0)));
+    if (!pos) continue;
+    hctx.font = 'bold 17px Trebuchet MS, sans-serif'; const wd = hctx.measureText(b.text).width + 22, x = pos[0], y = pos[1];
+    hctx.fillStyle = '#fffdf2'; hctx.strokeStyle = '#2a1e33'; hctx.lineWidth = 3;
+    hctx.beginPath(); hctx.roundRect(x - wd / 2, y - 34, wd, 30, 12); hctx.moveTo(x - 6, y - 4); hctx.lineTo(x, y + 6); hctx.lineTo(x + 6, y - 4); hctx.fill(); hctx.stroke();
+    hctx.fillStyle = '#2a1e33'; hctx.textAlign = 'center'; hctx.fillText(b.text, x, y - 13);
+  }
+}
 // Short messages at the top of the screen, like who just hit whom with a tomato.
 const toasts = [];
 function toast(msg) { toasts.push({ msg, t: performance.now() }); if (toasts.length > 4) toasts.shift(); }
@@ -1600,6 +1622,7 @@ function drawHud(players, me, opp) {
       text(cur.phase !== 'fight' ? 'Throw once the fight starts' : k < 1 ? 'Grabbing another…' : 'Click to throw', cx, h - 38, 15, k < 1 ? '#ffffff90' : '#fff');
     }
   }
+  drawBubbles(players, me);
   splat.draw(w, h);
   drawToasts(w, h);
 
@@ -1624,7 +1647,7 @@ function drawHud(players, me, opp) {
   if (joined && !locked() && !menu.isOpen()) text(spectating() && cur.players.some(Boolean) ? 'Click to take your seat in the stands and throw things' : 'Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
   if (spectating()) hctx.fillText('Mouse look around · 1 2 3 pick what to throw · click throw · Esc settings', w / 2, h - 14);
-  else hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block · Q feint · F kick · Esc settings', w / 2, h - 14);
+  else hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block · Q feint · F kick · T taunt · Esc settings', w / 2, h - 14);
 }
 
 // ---------- the Wheel of Weapons ----------

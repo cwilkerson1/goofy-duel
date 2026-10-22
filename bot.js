@@ -1,7 +1,7 @@
 // The practice knight: a computer opponent for fighting alone. It plays by the same rules as a person,
 // only through the same inputs (move, look, block, wind up, release, feint, kick), with a human-ish
 // reaction time and the odd mistake, so it can be beaten by reading it.
-import { ARM, DIRS, MIRROR, newPlayer, startHold, releaseHold, feint, kick, tm, wpn, voteRematch, forward, rightOf } from './shared/sim.js';
+import { ARM, DIRS, MIRROR, newPlayer, startHold, releaseHold, feint, kick, tm, wpn, voteRematch, forward, rightOf, taunt, beaten } from './shared/sim.js';
 import { HAZ, pendulum, vent } from './shared/hazards.js';
 
 const BOT_NAMES = ['Sir Practice', 'The Training Knight', 'Sir Strawman', 'Dummy the Bold'];
@@ -47,6 +47,8 @@ export function botThink(me, room, dt) {
   if (B.strafeT <= 0) { B.strafe = pick([-1, 0, 0, 1]); B.strafeT = rnd(0.8, 2.2); }
   i.ms = B.strafe;
   dodgeTraps(me, room, i);
+  // Rub it in when the opponent is in a bad way and not attacking.
+  if (beaten(op) && !threat && me.state === 'idle' && Math.random() < dt * 1.5) taunt(me, room);
 
   // Attack: wind up from a random side, sometimes going for a heavy, sometimes feinting.
   B.cool -= dt;
