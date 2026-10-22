@@ -1,7 +1,8 @@
 // The practice knight: a computer opponent for fighting alone. It plays by the same rules as a person,
 // only through the same inputs (move, look, block, wind up, release, feint, kick), with a human-ish
 // reaction time and the odd mistake, so it can be beaten by reading it.
-import { ARM, DIRS, MIRROR, newPlayer, startHold, releaseHold, feint, kick, tm, wpn, voteRematch } from './shared/sim.js';
+import { ARM, DIRS, MIRROR, newPlayer, startHold, releaseHold, feint, kick, tm, wpn, voteRematch, forward, rightOf } from './shared/sim.js';
+import { HAZ, pendulum, vent } from './shared/hazards.js';
 
 const BOT_NAMES = ['Sir Practice', 'The Training Knight', 'Sir Strawman', 'Dummy the Bold'];
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -45,6 +46,7 @@ export function botThink(me, room, dt) {
   B.strafeT -= dt;
   if (B.strafeT <= 0) { B.strafe = pick([-1, 0, 0, 1]); B.strafeT = rnd(0.8, 2.2); }
   i.ms = B.strafe;
+  dodgeTraps(me, room, i);
 
   // Attack: wind up from a random side, sometimes going for a heavy, sometimes feinting.
   B.cool -= dt;
@@ -68,4 +70,27 @@ export function botThink(me, room, dt) {
     B.kickT = rnd(1.5, 3);
     if (Math.random() < 0.35) kick(me, room);
   }
+}
+
+// Get out of the way of the traps, most of the time: step off the pendulum's line when the blade is on
+// its way, and away from a vent that's hissing or burning. (Spike plates it just blunders onto.)
+function dodgeTraps(me, room, i) {
+  const H = room.hz; if (!H) return;
+  const L = H.L, ax = [Math.cos(L.ang), Math.sin(L.ang)];
+  let wx = 0, wz = 0;
+  const off = -me.x * ax[1] + me.z * ax[0], along = me.x * ax[0] + me.z * ax[1];
+  if (Math.abs(off) < 1.2 && Math.abs(along) < 4) {
+    // Is the blade coming through here within the next second or so?
+    for (let k = 0; k <= 6; k++) {
+      const pd = pendulum(L, H.t + k * 0.2), bAlong = pd.pos[0] * ax[0] + pd.pos[2] * ax[1];
+      if (Math.abs(bAlong - along) < 1.2 && pd.pos[1] < 2.2) { const s = off >= 0 ? 1 : -1; wx += -ax[1] * s; wz += ax[0] * s; break; }
+    }
+  }
+  for (const v of L.vents) {
+    const st = vent(v, H.t), dx = me.x - v.x, dz = me.z - v.z, d = Math.hypot(dx, dz) || 1e-3;
+    if (st.s !== 'idle' && d < HAZ.VENT.r + 1) { wx += dx / d; wz += dz / d; }
+  }
+  if (!wx && !wz) return;
+  const f = forward(me.yaw), r = rightOf(me.yaw), l = Math.hypot(wx, wz);
+  i.mf = Math.sign(Math.round((wx * f[0] + wz * f[2]) / l * 2)); i.ms = Math.sign(Math.round((wx * r[0] + wz * r[2]) / l * 2)); i.b = 0;
 }

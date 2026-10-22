@@ -8,6 +8,7 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
+import { makeHazardView } from '/hazards.js';
 import { buildWeapon, knightGeometry, UPPER_ARM, FOREARM, THIGH, SHIN } from '/models.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
@@ -637,6 +638,8 @@ const MAT = {
   gold: pbrMat(TEX.steel, { metalness: 0.95, color: 0xd9b048, ...SHINE }), wood: pbrMat(TEX.grain),
   jewel: new THREE.MeshStandardMaterial({ color: 0x3fa7ff, emissive: 0x1050ff, roughness: 0.1 }),
 };
+// The arena's traps (hazards.js).
+const hazView = makeHazardView({ scene, MAT, stone: pbrMat(withRepeat(TEX.stone, 1, 4), { color: 0x9a948e }), iron: MAT.darkSteel });
 // What the weapon models are made of. Each weapon gets its own blade material, so it can glow on a heavy.
 const WMAT = { ...MAT, dark: MAT.darkSteel, blade: (gold) => bloodable(pbrMat(TEX.steel, gold ? { metalness: 1, color: 0xffe08a, emissive: 0x332200, ...SHINE } : { metalness: 1, color: 0xeef1f4, ...SHINE })) };
 const FLAIL_PIVOT = 0.38, FLAIL_CHAIN = 0.45; // where the chain hangs from, and how far the ball sits from there
@@ -1342,6 +1345,10 @@ function handleEvent(ev) {
       break;
     case 'guardbreak': audio.thud(); if (mine) shake = 0.08; break;
     case 'kickSwing': audio.whoosh('low'); break;
+    case 'plate': audio.clang(); break; // click
+    case 'spikes': audio.thud(); audio.clang(); break;
+    case 'pendHit': audio.thud(); if (mine) shake = 0.12; break;
+    case 'burn': audio.whoosh('low'); if (mine) { shake = 0.05; hurtFlash = 0.4; } break;
     case 'kickMiss': audio.whoosh('low'); if (mine) shake = 0.05; break;
     case 'kick': audio.thud(); setTimeout(() => audio.thud(), 300); // the boot, then the body hitting the floor
       if (mine) { shake = 0.1; hurtFlash = 0.4; } break;
@@ -1435,6 +1442,21 @@ function interpPlayers() {
     smoothOut(o);
     return { ...o, parts: p.parts, dead: p.dead, deathT: p.dead ? o.deathT : 0, fallYaw: p.dead ? p.fallYaw : o.fallYaw, headless: p.headless, weapon: p.weapon, score: p.score, stam: p.stam, bleed: p.bleed, bruise: p.bruise, color: p.color, name: p.name };
   });
+}
+
+// The traps' clock, at the same moment the opponent is drawn at, so a blade that hits them is touching them.
+function hazardNow() {
+  const B = netBuffer;
+  if (!cur || !cur.trap) return { hz: null, t: 0 };
+  if (B.offset === null || B.snaps.length < 2) return { hz: cur.trap, t: cur.trap.t };
+  const renderT = performance.now() - B.offset - B.delay;
+  let i = B.snaps.length - 1;
+  while (i > 0 && B.snaps[i - 1].t > renderT) i--;
+  const a = B.snaps[Math.max(0, i - 1)].m.trap, b = B.snaps[i].m.trap, bt = B.snaps[i].t, at = B.snaps[Math.max(0, i - 1)].t;
+  if (!b) return { hz: cur.trap, t: cur.trap.t };
+  if (!a || a.L.id !== b.L.id || bt === at) return { hz: b, t: b.t + Math.max(0, Math.min(EXTRAPOLATE_MS, renderT - bt)) / 1000 };
+  const k = (renderT - at) / (bt - at);
+  return { hz: b, t: a.t + (b.t - a.t) * Math.max(0, Math.min(1, k)) + Math.max(0, Math.min(EXTRAPOLATE_MS, renderT - bt)) / 1000 };
 }
 
 // ---------- your own movement, predicted (shared/predict.js) ----------
@@ -1662,7 +1684,6 @@ function frame(now) {
   if (ft > 150) reportHitch('frame', ft);
   if (now - netStats.since > 1000) { netStats.fps = netStats.frames; netStats.worstShown = netStats.worst; netStats.frames = 0; netStats.worst = 0; netStats.since = now; }
   const players = interpPlayers().slice();
-  { const d = roundMod().fog && cur.phase !== 'spin' ? 0.14 : 0.02; scene.fog.density += (d - scene.fog.density) * Math.min(1, dt * 1.5); } // fog rolls in and out
   let me = players.find((p) => p && p.id === myId) || null;
   const opp = players.find((p) => p && p.id !== myId) || null;
   if (me && pred.on && !me.dead) {
@@ -1672,6 +1693,9 @@ function frame(now) {
   }
   if (me && !debugPose) { me = predictMyAction(me, now); players[players.findIndex((p) => p && p.id === myId)] = me; }
   if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
+  { const H = hazardNow(); hazView.update(H.hz, H.t, dt, me, audio); pred.hzL = cur && cur.trap ? cur.trap.L : null; }
+  for (const p of players) if (p && p.burn > 0 && !p.dead) hazView.burning([p.x, p.y, p.z], dt);
+  { const d = roundMod().fog && cur && cur.phase !== 'spin' ? 0.14 : 0.02; scene.fog.density += (d - scene.fog.density) * Math.min(1, dt * 1.5); } // fog rolls in and out
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(cur.song); }
     else music.stop();

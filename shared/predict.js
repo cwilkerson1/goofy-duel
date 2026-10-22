@@ -1,5 +1,6 @@
 // Client-side prediction of your own movement. Kept apart from client.js so it can be tested in Node.
 import { ARENA_R, legsLeft, COST, moveGoal, ACCEL, STRIDE, mod } from './sim.js';
+import { pushOutOfPillars } from './hazards.js';
 
 // Your knight moves on your screen the moment you press a key, using the same movement rules as the
 // server, and quietly eases toward where the server says you are. So your own view never waits on
@@ -42,6 +43,7 @@ export function makePredictor() {
     for (const e of this.hist) { e.x += cx; e.y += cy; e.z += cz; }
     const d = Math.hypot(this.x, this.z), maxR = ARENA_R - 0.5;
     if (d > maxR) { this.x *= maxR / d; this.z *= maxR / d; }
+    pushOutOfPillars(this.hzL, this); // set by the browser from the latest update
     if (opp && !opp.dead && !s.dead) { // don't walk through them (the server splits the push between you)
       const dx = this.x - opp.x, dz = this.z - opp.z, dd = Math.hypot(dx, dz) || 1e-3;
       if (dd < 0.75) { const push = (0.75 - dd) / 2; this.x += (dx / dd) * push; this.z += (dz / dd) * push; }

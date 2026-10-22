@@ -12,6 +12,7 @@
 // - Sprint (Shift) when idle and moving forward; it burns stamina.
 // - Attacking into an incoming swing from the matching side, just in time, is a chamber.
 
+import { HAZ, rollLayout, pendulum, vent, spikes, pushOutOfPillars } from './hazards.js';
 export const ARENA_R = 11;
 export const ARM = 0.6, BLADE = 0.95, HEAD_R = 0.14, TORSO = 0.6, LEG = 0.95;
 export const PARTS = ['head', 'torso', 'armR', 'armL', 'legR', 'legL'];
@@ -648,6 +649,7 @@ function stepPlayer(room, p, dt) {
   if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
   const d = Math.hypot(p.x, p.z), maxR = ARENA_R - 0.5;
   if (d > maxR) { p.x *= maxR / d; p.z *= maxR / d; }
+  pushOutOfPillars(room.hz && room.hz.L, p);
   if (p.onGround) p.walk += Math.hypot(p.vx, p.vz) * dt * STRIDE;
 }
 
@@ -744,6 +746,7 @@ export function stepRoom(room, dt) {
     if (frozen) { p.vx = p.vz = 0; continue; }
     stepPlayer(room, p, dt);
   }
+  if (room.hz) { room.hz.t += dt; if (room.phase === 'fight') stepHazards(room, fighters, dt); }
   if (fighters.length === 2) {
     const [a, b] = fighters;
     resolveSwing(room, a, b); resolveSwing(room, b, a);
@@ -792,6 +795,10 @@ export function voteRematch(room, p) {
 function startRound(room, resetScores) {
   room.fighters.forEach((p, i) => { if (p) { resetFighter(p, i); p.rematch = false; if (resetScores) p.score = 0; } });
   // Spin the wheel of fortune for everyone's weapon this round.
+  // A fresh arena of traps every round.
+  const L = rollLayout();
+  room.hz = { L, t: 0, plates: L.plates.map(() => null), hit: L.plates.map(() => []) };
+  room.fighters.forEach((p) => { if (p) { p.pendCool = 0; p.burnT = 0; } });
   // ...and the round's rule (room.forceMod pins one, for testing).
   room.mod = MODS[room.forceMod] ? room.forceMod : rollMod();
   const M = MODS[room.mod], shared = rollWeapon(), result = {};
@@ -803,6 +810,74 @@ function startRound(room, resetScores) {
   room.phase = 'spin'; room.timer = SPIN_TIME; room.msg = 'Spinning the Wheel of Weapons…';
   room.song = Math.floor(Math.random() * 1e9); // everyone's browser plays the same fight track from this
   room.events.push({ t: 'round' }, { t: 'spin', result, mod: room.mod, dur: SPIN_TIME });
+}
+
+// ---------- traps (see hazards.js) ----------
+// Traps hurt like a weapon would, from an attacker that isn't there.
+const trap = (yaw, weapon) => ({ id: -1, yaw, weapon, heavy: true, sdir: 'over', mod: 'none' });
+const ALL_PARTS = ['head', 'torso', 'armR', 'armL', 'legR', 'legL'];
+function stepHazards(room, fighters, dt) {
+  const H = room.hz, L = H.L, t = H.t;
+  // The pendulum: whatever it catches is cut and you're thrown off your feet the way it was swinging.
+  const pd = pendulum(L, t), P = HAZ.PEND;
+  const blade = { a: pd.pos.map((v, i) => v - pd.dir[i] * P.half), b: pd.pos.map((v, i) => v + pd.dir[i] * P.half), r: P.r };
+  for (const p of fighters) {
+    if (p.dead) continue;
+    p.pendCool = Math.max(0, (p.pendCool || 0) - dt);
+    if (p.pendCool > 0) continue;
+    const sk = skeleton(p), shapes = partShapes(sk), hit = touching(blade, p, shapes, ALL_PARTS);
+    if (!hit.length) continue;
+    p.pendCool = P.cool;
+    const part = hit.reduce((a, b) => (segSegDist(blade.a, blade.b, shapes[b].a, shapes[b].b) < segSegDist(blade.a, blade.b, shapes[a].a, shapes[a].b) ? b : a));
+    const mv = pd.speed >= 0 ? 1 : -1, d = [pd.dir[0] * mv, pd.dir[2] * mv], yaw = Math.atan2(-d[0], -d[1]);
+    damage(room, trap(yaw, 'axe'), p, part, part === 'head' ? PART_MAX.head * HEAD_CAP : P.dmg, sk, { m: 1, tag: 'pendulum' });
+    p.vx += d[0] * P.knock; p.vz += d[1] * P.knock; p.vy = Math.max(p.vy, 3); p.onGround = false;
+    if (!p.dead && !(p.downT > 0)) { p.downT = 1e-3; p.fallYaw = yaw; p.blocking = false; if (p.state === 'kick') p.state = 'idle'; }
+    room.events.push({ t: 'pendHit', id: p.id, pos: pd.pos });
+  }
+  // Fire vents: standing in the flame burns, and you keep smouldering for a moment after you get out.
+  for (const p of fighters) {
+    if (p.dead) continue;
+    p.burnT = Math.max(0, (p.burnT || 0) - dt);
+    if (p.burnT > 0) p.parts.torso.hp -= 4 * dt;
+  }
+  for (const v of L.vents) {
+    if (vent(v, t).s !== 'burn') continue;
+    for (const p of fighters) {
+      if (p.dead || Math.hypot(p.x - v.x, p.z - v.z) > HAZ.VENT.r + 0.25 || p.y > HAZ.VENT.h) continue;
+      const n = HAZ.VENT.dps * dt;
+      p.parts.torso.hp -= n * 0.6;
+      for (const k of ['legR', 'legL']) if (!p.parts[k].cut) p.parts[k].hp = Math.max(1, p.parts[k].hp - n * 0.2); // fire chars, it doesn't cut
+      if (!(p.burnT > 0.9)) { interrupt(p, 0.25); room.events.push({ t: 'burn', id: p.id }); }
+      p.burnT = 1.2;
+    }
+  }
+  for (const p of fighters) if (!p.dead && p.parts.torso.hp <= 0) { p.parts.torso.hp = 0; kill(room, p, p.burnT > 0 ? 'burned' : 'bled out'); }
+  // Spike plates: step on one and it clicks; a moment later spikes punch up through your feet.
+  const S = HAZ.PLATE;
+  L.plates.forEach((pl, i) => {
+    const on = (p) => !p.dead && Math.abs(p.x - pl.x) < S.half + 0.15 && Math.abs(p.z - pl.z) < S.half + 0.15 && p.y < 0.5;
+    let since = H.plates[i] == null ? null : t - H.plates[i];
+    if (since != null && since > S.delay + S.up + S.rearm) { H.plates[i] = null; H.hit[i] = []; since = null; }
+    if (since == null) {
+      if (fighters.some((p) => on(p) && p.onGround)) { H.plates[i] = t; room.events.push({ t: 'plate', i, pos: [pl.x, 0, pl.z] }); }
+      return;
+    }
+    if (since < S.delay || since > S.delay + S.up) return;
+    if (since - dt < S.delay) room.events.push({ t: 'spikes', i, pos: [pl.x, 0, pl.z] });
+    for (const p of fighters) {
+      if (!on(p) || H.hit[i].includes(p.id)) continue;
+      H.hit[i].push(p.id);
+      const sk = skeleton(p);
+      for (const k of ['legR', 'legL']) if (!p.parts[k].cut && !p.dead) damage(room, trap(p.yaw + Math.PI, 'pick'), p, k, S.dmg, sk, { m: 1, tag: 'spikes' });
+      p.vy = Math.max(p.vy, 3.5); p.onGround = false;
+    }
+  });
+}
+// What browsers need to draw the traps: the layout, the clock, and how long ago each plate clicked.
+export function hazardSnapshot(room) {
+  const H = room.hz; if (!H) return null;
+  return { L: H.L, t: r3(H.t), pl: H.plates.map((at) => (at == null ? -1 : r3(H.t - at))) };
 }
 
 export function newRoom(name) {
@@ -817,7 +892,7 @@ export function snapshotPlayer(p) {
     heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), staggered: p.stun > 0 && p.staggered, stam: Math.round(p.stam),
     ack: p.ack || 0, queued: !!p.queued,
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
-    weapon: p.weapon, mod: p.mod || 'none', walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
+    weapon: p.weapon, mod: p.mod || 'none', burn: r2(p.burnT || 0), walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),
   };
 }

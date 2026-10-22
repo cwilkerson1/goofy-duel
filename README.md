@@ -197,6 +197,41 @@ opens the invite link from **🔗 Copy invite link**, which is `/?room=WOLF-42`)
 picks another, so several pairs can fight at once without bumping into each other. While you wait in the
 arena, the code is on screen and **C** copies the link.
 
+## Round rules
+
+The wheel also rolls a rule for the round, shared by both fighters. About a third of rounds are
+standard; the rest are one of these:
+
+| Rule | What changes |
+|---|---|
+| 🌙 Moon Gravity | Jump about twice as high and fall slowly |
+| 🍷 Glass Knights | Everything hits twice as hard, and a clean head shot can kill outright |
+| 🩸 Bloodbath | Wounds bleed three times as fast |
+| 🌫️ Pea Soup | Thick fog rolls in |
+| 👊 Bare Knuckle | Both fighters get fists |
+| 🪞 Mirror Match | Both fighters get the same weapon |
+| 🫁 Iron Lungs | Half stamina costs, triple recovery |
+| ⚡ Double Time | Every wind-up, swing and recovery is 30% faster |
+
+The rule's name stays at the top of the screen for the whole round. To test one, start the server with
+`MOD=glass` (or any rule's key from `MODS` in `shared/sim.js`).
+
+## Traps
+
+Each round lays out the arena differently:
+
+- **The pendulum.** Two stone pillars hold a beam across the arena, and a huge axe blade swings from
+  it right through the middle, across the line between the spawns. It cuts whatever it catches and
+  knocks you off your feet. It's low enough to hit your body in the middle and climbs as it swings out.
+  The pillars also block movement, so you can fight around them.
+- **Fire vents.** Iron grates in the floor glow and spark for a moment, then roar up in a column of
+  flame. Standing in it burns, and you keep smouldering for a moment after you get out.
+- **Spike plates.** Step on one and it clicks. A moment later spikes punch up through it and into the
+  legs of whoever is standing there, which could be your opponent if you knock them onto it.
+
+Traps only hurt once the fight starts. The practice knight steps out of the pendulum's way and away
+from vents, but walks straight onto spike plates.
+
 ## Sound effects
 
 Every sound is synthesized in the browser unless recorded ones are installed. Put audio files in
@@ -211,8 +246,10 @@ server.js          HTTP + WebSocket server and the 60 Hz game loop
 rtc.js             The WebRTC fast lane: game updates and movement over a UDP-like data channel
 shared/sim.js      Combat rules, body poses, 3D hit detection (used by server and browser)
 shared/predict.js  Moves your own knight instantly in the browser, before the server confirms it
+shared/hazards.js  The arena's traps: layout, pendulum, vents and spike plates (server and browser)
 public/index.html  Start screen
 public/client.js   3D arena, knights, blood and flying limbs, HUD, sounds (all synthesized), input
+public/hazards.js  Drawing the traps: pillars, the pendulum, fire and smoke, spikes
 public/music/      Fight music: drop audio files here
 public/vendor/     Three.js 0.169 and its glow/post-processing add-ons (MIT licence)
 mac/               launchd file for running it as a background service on macOS

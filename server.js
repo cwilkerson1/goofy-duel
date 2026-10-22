@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch } from './shared/sim.js';
+import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch, hazardSnapshot } from './shared/sim.js';
 import { makeBot, botThink } from './bot.js';
 import { rtcReady, answerOffer } from './rtc.js';
 
@@ -135,7 +135,7 @@ function wsAccept(req, socket) {
 const rooms = new Map();
 let nextId = 1;
 // WEAPON=scythe npm start  makes the wheel always land on one weapon (handy for practice).
-const getRoom = (name) => { if (!rooms.has(name)) rooms.set(name, Object.assign(newRoom(name), { clients: new Set(), forceWeapon: process.env.WEAPON })); return rooms.get(name); };
+const getRoom = (name) => { if (!rooms.has(name)) rooms.set(name, Object.assign(newRoom(name), { clients: new Set(), forceWeapon: process.env.WEAPON, forceMod: process.env.MOD })); return rooms.get(name); };
 
 server.on('upgrade', (req, socket) => {
   const url = new URL(req.url, 'http://x');
@@ -237,7 +237,7 @@ function tick() {
     stepRoom(room, TICK);
     if (frame % SEND_EVERY) continue;
     const snap = {
-      t: 's', n: frame, phase: room.phase, msg: room.msg, song: room.song, timer: Math.max(0, Math.round(room.timer * 10) / 10),
+      t: 's', n: frame, phase: room.phase, msg: room.msg, song: room.song, timer: Math.max(0, Math.round(room.timer * 10) / 10), trap: hazardSnapshot(room),
       players: room.fighters.map((p) => (p ? snapshotPlayer(p) : null)),
       ev: room.events, spectators: room.clients.size - room.fighters.filter(Boolean).length, hz: hiccup,
     };
