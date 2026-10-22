@@ -9,6 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS, seatAt, STANDS_Y, THROW_EVERY } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 import { makeHazardView } from '/hazards.js';
+import { TRAPS } from '/shared/hazards.js';
 import { makeCrowd, makeThrownView, makeCrowdVoice } from '/crowd.js';
 import { buildWeapon, knightGeometry, UPPER_ARM, FOREARM, THIGH, SHIN } from '/models.js';
 
@@ -1618,7 +1619,8 @@ function drawHud(players, me, opp) {
   } else if (cur.phase !== 'fight') text(cur.msg, w / 2, h * 0.32, cur.phase === 'roundEnd' ? 46 : 34, cur.phase === 'roundEnd' ? '#ffd23f' : '#fff');
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   // A round with a special rule keeps a reminder at the top of the screen.
-  { const M = roundMod(); if (M !== MODS.none && cur.phase !== 'waiting' && !(cur.phase === 'spin' || wheel.visible())) text(`${M.emoji} ${M.name}`, w / 2, 84, 18, '#7dff9a'); }
+  { const M = roundMod(), Tr = cur.trap && TRAPS[cur.trap.L.kind], show = cur.phase !== 'waiting' && !(cur.phase === 'spin' || wheel.visible());
+    if (show) text([M !== MODS.none && `${M.emoji} ${M.name}`, Tr && `${Tr.emoji} ${Tr.name}`].filter(Boolean).join('   ·   '), w / 2, 84, 18, '#7dff9a'); }
   if (joined && !locked() && !menu.isOpen()) text(spectating() && cur.players.some(Boolean) ? 'Click to take your seat in the stands and throw things' : 'Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
   if (spectating()) hctx.fillText('Mouse look around · 1 2 3 pick what to throw · click throw · Esc settings', w / 2, h - 14);
@@ -1644,7 +1646,7 @@ const wheel = (() => {
       // Rotate so `inside` ends under the pointer, after several full turns.
       const target = POINTER - inside, turns = 6 + Math.floor(Math.random() * 3);
       const base = angle - (angle % (Math.PI * 2));
-      st = { t0: performance.now(), dur: (ev.dur - 1.3) * 1000, from: angle, to: base + turns * Math.PI * 2 + target, mine, result: ev.result, mod: MODS[ev.mod] || MODS.none, landed: false };
+      st = { t0: performance.now(), dur: (ev.dur - 1.3) * 1000, from: angle, to: base + turns * Math.PI * 2 + target, mine, result: ev.result, mod: MODS[ev.mod] || MODS.none, trap: TRAPS[ev.trap], landed: false };
       audio.drumroll(st.dur / 1000);
     },
     visible() { return st && performance.now() - st.t0 < st.dur + 1300; },
@@ -1701,6 +1703,11 @@ const wheel = (() => {
         text(`${isMe ? 'YOU GOT' : 'THEY GOT'}: ${W.emoji} ${W.name}!`, cx, cy + R + 56, 34 * pop, st.mine === 'excalibur' ? '#ffd700' : '#fff');
         text(W.line, cx, cy + R + 86, 18, '#c9bfe0');
         text(swingFeel(W), cx, cy + R + 140, 15, '#ffb060');
+        // This round's trap: beside the wheel on a wide screen, under it on a narrow one.
+        if (st.trap) {
+          const side = w - (cx + R + 40) > 300, tx = side ? cx + R + 40 : cx, ty = side ? cy - 12 : cy + R + 166, al = side ? 'left' : 'center';
+          text(`TRAP: ${st.trap.emoji} ${st.trap.name}`, tx, ty, 24, '#ff8a5a', al); text(st.trap.line, tx, ty + 24, 14, '#fff', al);
+        }
         for (const p of players) if (p && p.id !== myId && st.result[p.id] && isMe) { const o = WEAPONS[st.result[p.id]]; text(`${p.name} got ${o.emoji} ${o.name}`, cx, cy + R + 114, 16, TEAM_CSS[p.color]); }
       } else text('Spinning…', cx, cy + R + 56, 24, '#fff');
       for (const c of confetti) { hctx.fillStyle = c.c; hctx.save(); hctx.translate(c.x, c.y); hctx.rotate(c.r); hctx.fillRect(-4, -2, 8, 4); hctx.restore(); }

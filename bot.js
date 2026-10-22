@@ -79,7 +79,7 @@ function dodgeTraps(me, room, i) {
   const L = H.L, ax = [Math.cos(L.ang), Math.sin(L.ang)];
   let wx = 0, wz = 0;
   const off = -me.x * ax[1] + me.z * ax[0], along = me.x * ax[0] + me.z * ax[1];
-  if (Math.abs(off) < 1.2 && Math.abs(along) < 4) {
+  if (L.kind === 'pendulum' && Math.abs(off) < 1.2 && Math.abs(along) < 4) {
     // Is the blade coming through here within the next second or so?
     for (let k = 0; k <= 6; k++) {
       const pd = pendulum(L, H.t + k * 0.2), bAlong = pd.pos[0] * ax[0] + pd.pos[2] * ax[1];

@@ -799,7 +799,7 @@ function startRound(room, resetScores) {
   // Spin the wheel of fortune for everyone's weapon this round.
   room.thrown = [];
   // A fresh arena of traps every round.
-  const L = rollLayout();
+  const L = rollLayout(Math.random, room.hz && room.hz.L.kind);
   room.hz = { L, t: 0, plates: L.plates.map(() => null), hit: L.plates.map(() => []) };
   room.fighters.forEach((p) => { if (p) { p.pendCool = 0; p.burnT = 0; } });
   // ...and the round's rule (room.forceMod pins one, for testing).
@@ -812,7 +812,7 @@ function startRound(room, resetScores) {
   } });
   room.phase = 'spin'; room.timer = SPIN_TIME; room.msg = 'Spinning the Wheel of Weapons…';
   room.song = Math.floor(Math.random() * 1e9); // everyone's browser plays the same fight track from this
-  room.events.push({ t: 'round' }, { t: 'spin', result, mod: room.mod, dur: SPIN_TIME });
+  room.events.push({ t: 'round' }, { t: 'spin', result, mod: room.mod, trap: L.kind, dur: SPIN_TIME });
 }
 
 // ---------- traps (see hazards.js) ----------
@@ -822,10 +822,10 @@ const ALL_PARTS = ['head', 'torso', 'armR', 'armL', 'legR', 'legL'];
 function stepHazards(room, fighters, dt) {
   const H = room.hz, L = H.L, t = H.t;
   // The pendulum: whatever it catches is cut and you're thrown off your feet the way it was swinging.
-  const pd = pendulum(L, t), P = HAZ.PEND;
+  const pd = pendulum(L, t), P = HAZ.PEND, swinging = L.kind === 'pendulum';
   const blade = { a: pd.pos.map((v, i) => v - pd.dir[i] * P.half), b: pd.pos.map((v, i) => v + pd.dir[i] * P.half), r: P.r };
   for (const p of fighters) {
-    if (p.dead) continue;
+    if (p.dead || !swinging) continue;
     p.pendCool = Math.max(0, (p.pendCool || 0) - dt);
     if (p.pendCool > 0) continue;
     const sk = skeleton(p), shapes = partShapes(sk), hit = touching(blade, p, shapes, ALL_PARTS);
@@ -909,7 +909,7 @@ export function randomThrown() {
 function stepThrown(room, fighters, dt) {
   // The crowd throws on its own sometimes, more when there's blood.
   room.crowdHeat = Math.max(0, (room.crowdHeat || 0) - dt * 0.15);
-  if (room.phase === 'fight' && Math.random() < dt * (0.12 + room.crowdHeat * 0.6)) {
+  if (room.phase === 'fight' && Math.random() < dt * (0.3 + room.crowdHeat * 0.8)) {
     const f = pick(fighters.filter((p) => !p.dead));
     if (f) {
       const a = Math.atan2(f.z, f.x) + rand(-0.9, 0.9);

@@ -63,15 +63,18 @@ export function makeHazardView({ scene, MAT, stone, iron }) {
       const base = add(new THREE.Mesh(new THREE.BoxGeometry(HAZ.PILLAR.r * 2.4, 0.35, HAZ.PILLAR.r * 2.4), stone)); base.position.set(x, 0.17, z);
       const cap = add(new THREE.Mesh(new THREE.BoxGeometry(HAZ.PILLAR.r * 2.2, 0.3, HAZ.PILLAR.r * 2.2), stone)); cap.position.set(x, top + 0.15, z);
     }
-    const beam = add(new THREE.Mesh(new THREE.BoxGeometry(HAZ.PILLAR.at * 2 + 1.2, 0.55, 0.6), iron));
-    beam.position.set(0, top + 0.55, 0); beam.rotation.y = -L.ang;
-    // The pendulum: a hub on the beam, an iron arm, and the blade.
-    const hang = new THREE.Group(); hang.position.set(0, P.pivotY, 0); hang.rotation.y = -L.ang; root.add(hang);
-    pend = new THREE.Group(); hang.add(pend);
-    const hub = add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 16), iron), hang); hub.rotation.x = Math.PI / 2;
-    const arm = add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, P.len, 10), iron), pend); arm.position.y = -P.len / 2;
-    const collar = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 0.14), iron), pend); collar.position.y = -P.len + 0.12;
-    const blade = add(new THREE.Mesh(crescent(), MAT.steel), pend); blade.position.y = -P.len - 0.15;
+    pend = null;
+    if (L.kind === 'pendulum') {
+      const beam = add(new THREE.Mesh(new THREE.BoxGeometry(HAZ.PILLAR.at * 2 + 1.2, 0.55, 0.6), iron));
+      beam.position.set(0, top + 0.55, 0); beam.rotation.y = -L.ang;
+      // The pendulum: a hub on the beam, an iron arm, and the blade.
+      const hang = new THREE.Group(); hang.position.set(0, P.pivotY, 0); hang.rotation.y = -L.ang; root.add(hang);
+      pend = new THREE.Group(); hang.add(pend);
+      const hub = add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.5, 16), iron), hang); hub.rotation.x = Math.PI / 2;
+      const arm = add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, P.len, 10), iron), pend); arm.position.y = -P.len / 2;
+      const collar = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 0.14), iron), pend); collar.position.y = -P.len + 0.12;
+      const blade = add(new THREE.Mesh(crescent(), MAT.steel), pend); blade.position.y = -P.len - 0.15;
+    }
     // Fire vents: an iron grate over a glowing pit.
     vents = L.vents.map((v) => {
       const g = new THREE.Group(); g.position.set(v.x, 0, v.z); root.add(g);
@@ -106,10 +109,12 @@ export function makeHazardView({ scene, MAT, stone, iron }) {
     update(hz, t, dt, me, audio) {
       if (!hz) { if (root) { scene.remove(root); root = null; built = null; } fire.step(dt, 3); smoke.step(dt, 0.6); return; }
       const L = hz.L; if (built !== L.id) build(L);
-      const pd = pendulum(L, t); pend.rotation.z = pd.th;
-      // A heavy whoosh as the blade sweeps past you.
-      if (Math.sign(pd.th) !== Math.sign(lastTh) && me && Math.hypot(me.x, me.z) < 5) audio.whoosh('low');
-      lastTh = pd.th;
+      if (pend) {
+        const pd = pendulum(L, t); pend.rotation.z = pd.th;
+        // A heavy whoosh as the blade sweeps past you.
+        if (Math.sign(pd.th) !== Math.sign(lastTh) && me && Math.hypot(me.x, me.z) < 5) audio.whoosh('low');
+        lastTh = pd.th;
+      }
       for (const V of vents) {
         const st = vent(V.v, t);
         V.glow.material.opacity = st.s === 'warn' ? 0.25 + 0.5 * st.k : st.s === 'burn' ? 0.9 : 0.08 + 0.04 * Math.sin(t * 3 + V.v.x);

@@ -2,6 +2,7 @@
 // Each round rolls a fresh layout. Everything that moves is worked out from the hazard clock, so every
 // browser shows the pendulum and the vents exactly where the server has them.
 //
+// Each round has one kind of trap, picked at random (never the same kind twice in a row):
 // - Two stone pillars hold up a beam across the arena, and a huge axe blade swings from it through the
 //   middle, right across the line between the two spawns.
 // - Fire vents in the floor hiss and glow for a moment, then roar up in a column of flame.
@@ -21,26 +22,32 @@ export const HAZ = {
 };
 
 const r2 = (v) => Math.round(v * 100) / 100;
+export const TRAPS = {
+  pendulum: { emoji: '🪓', name: 'The Pendulum', line: 'A giant blade swings through the middle.' },
+  fire:     { emoji: '🔥', name: 'Fire Vents', line: 'Grates in the floor erupt in flame. Watch for the glow.' },
+  spikes:   { emoji: '📌', name: 'Spike Plates', line: 'Step on a plate and spikes punch up a moment later.' },
+};
 
 // A new arena. Fighters spawn at (0, ±4), so nothing is placed on top of them.
-export function rollLayout(rnd = Math.random) {
+export function rollLayout(rnd = Math.random, last = null) {
+  const kinds = Object.keys(TRAPS).filter((k) => k !== last), kind = kinds[Math.floor(rnd() * kinds.length)];
   const ang = (rnd() - 0.5) * 0.9; // the pendulum's line runs roughly across the gap between the spawns
   const ax = [Math.cos(ang), Math.sin(ang)];
-  const pillars = [1, -1].map((s) => [r2(ax[0] * HAZ.PILLAR.at * s), r2(ax[1] * HAZ.PILLAR.at * s)]);
+  const pillars = kind !== 'pendulum' ? [] : [1, -1].map((s) => [r2(ax[0] * HAZ.PILLAR.at * s), r2(ax[1] * HAZ.PILLAR.at * s)]);
   const taken = [[0, 4, 1.9], [0, -4, 1.9], ...pillars.map(([x, z]) => [x, z, HAZ.PILLAR.r + 0.6])];
   const offLine = (x, z) => Math.abs(-x * ax[1] + z * ax[0]); // distance from the pendulum's line
   const place = (n, r, minR, maxR) => {
     const out = [];
     for (let tries = 0; out.length < n && tries < 400; tries++) {
       const a = rnd() * Math.PI * 2, d = minR + rnd() * (maxR - minR), x = Math.cos(a) * d, z = Math.sin(a) * d;
-      if (offLine(x, z) < r + 0.5 || taken.some(([tx, tz, tr]) => Math.hypot(x - tx, z - tz) < r + tr)) continue;
+      if ((kind === 'pendulum' && offLine(x, z) < r + 0.5) || taken.some(([tx, tz, tr]) => Math.hypot(x - tx, z - tz) < r + tr)) continue;
       out.push([r2(x), r2(z)]); taken.push([x, z, r + 0.4]);
     }
     return out;
   };
-  const vents = place(3, HAZ.VENT.r, 2.2, 8.6).map(([x, z], i) => ({ x, z, ph: r2((i * HAZ.VENT.cycle) / 3 + rnd() * 1.5) }));
-  const plates = place(4, HAZ.PLATE.half * 1.5, 1.6, 8.8).map(([x, z]) => ({ x, z }));
-  return { id: Math.floor(rnd() * 1e9), ang: r2(ang), pillars, vents, plates };
+  const vents = kind !== 'fire' ? [] : place(5, HAZ.VENT.r, 2.2, 8.6).map(([x, z], i) => ({ x, z, ph: r2((i * HAZ.VENT.cycle) / 5 + rnd() * 1.2) }));
+  const plates = kind !== 'spikes' ? [] : place(7, HAZ.PLATE.half * 1.5, 1.6, 8.8).map(([x, z]) => ({ x, z }));
+  return { id: Math.floor(rnd() * 1e9), kind, ang: r2(ang), pillars, vents, plates };
 }
 
 // Where the pendulum blade is at time t: its centre, the way its edge runs (along the swing), its swing

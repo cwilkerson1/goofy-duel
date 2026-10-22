@@ -218,7 +218,7 @@ The rule's name stays at the top of the screen for the whole round. To test one,
 
 ## Traps
 
-Each round lays out the arena differently:
+Each round rolls one kind of trap (never the same kind twice in a row), shown on the wheel and at the top of the screen, and lays it out differently:
 
 - **The pendulum.** Two stone pillars hold a beam across the arena, and a huge axe blade swings from
   it right through the middle, across the line between the spawns. It cuts whatever it catches and
@@ -244,7 +244,7 @@ Click to take it, look around with the mouse, pick **1** 🍅 tomato, **2** 🪨
 and click to throw at whatever the crosshair is on, about one throw a second. A tomato splatters (in the
 face, it covers the fighter's screen for a few seconds), a rock stings and interrupts a wind-up, and a
 cabbage knocks you back a step. Nothing thrown can take off a limb. The crowd also throws things on its
-own now and then, more after someone loses a limb.
+own every few seconds, and more after someone loses a limb.
 
 ## Sound effects
 
