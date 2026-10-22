@@ -6,9 +6,10 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS, seatAt, STANDS_Y, THROW_EVERY } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 import { makeHazardView } from '/hazards.js';
+import { makeCrowd, makeThrownView, makeCrowdVoice } from '/crowd.js';
 import { buildWeapon, knightGeometry, UPPER_ARM, FOREARM, THIGH, SHIN } from '/models.js';
 
 const TEAM = [0xe0493e, 0x3e7be0];
@@ -293,7 +294,11 @@ TEX.granite = makePBR(256, 256, (u, v) => {
 }, { repeat: [1, 1], bump: 2 });
 
 // ---------- the arena (Halloween night) ----------
-const crowd = { bodies: null, heads: null, base: [], cheer: 0 };
+const crowd = { view: null, cheer: 0 };
+// Crowd voices are made once the sound system exists (crowd.js).
+let crowdVoice = null;
+const voice = () => (crowdVoice ||= makeCrowdVoice(audio, sfx));
+const thrown = makeThrownView(scene);
 const torches = [], torchLights = [], ghosts = [], bats = [], mists = [];
 // A carved pumpkin: orange ball with a glowing face painted on one side.
 const pumpkinFace = canvasTexture(256, 128, (g, w, h) => {
@@ -359,21 +364,7 @@ function buildArena() {
   }
   const outer = new THREE.Mesh(new THREE.CylinderGeometry(ARENA_R + 6.1, ARENA_R + 6.1, 6, 72, 1, true), pbrMat(withRepeat(TEX.stone, 60, 5), { side: THREE.DoubleSide, color: 0x77727e }));
   outer.position.y = 3; scene.add(outer);
-  const N = 420;
-  crowd.bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.19, 0.32, 4, 10), pbrMat({ normalMap: TEX.cloth.normalMap, roughnessMap: TEX.cloth.roughnessMap }), N);
-  crowd.heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.15, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }), N);
-  // pumpkin heads, skeletons, zombies, ghosts, vampires, witches
-  const monsters = [[0xc8640c, 0x1e1a1c], [0xd8d3c4, 0x2b2826], [0x6f8e52, 0x3a3240], [0xc8ccd6, 0x8a8c96], [0xe0d2cc, 0x4a1218], [0x7f9c5c, 0x261a30]];
-  for (let k = 0; k < N;) {
-    const [r, y] = pick(seats), a = rnd(0, Math.PI * 2);
-    if (Math.abs(Math.cos(a)) < 0.1) continue; // leave the space above the two gates empty
-    crowd.base.push({ k, x: Math.cos(a) * r, z: Math.sin(a) * r, y, ph: rnd(0, 6.28), sp: rnd(4, 9) });
-    const [head, body] = pick(monsters);
-    crowd.bodies.setColorAt(k, new THREE.Color(body));
-    crowd.heads.setColorAt(k, new THREE.Color(head));
-    k++;
-  }
-  scene.add(crowd.bodies, crowd.heads);
+  crowd.view = makeCrowd(scene, seats, pbrMat, TEX); // the people in the stands (crowd.js)
 
   // Pillars topped with jack-o'-lanterns, and spooky banners.
   const pillarMat = pbrMat(withRepeat(TEX.granite, 1, 4), { color: 0x8a8494 });
@@ -530,13 +521,8 @@ applySettings();
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1), _p = new THREE.Vector3(), _yAxis = new THREE.Vector3(0, 1, 0);
 function updateCrowd(t, dt) {
   crowd.cheer = Math.max(0, crowd.cheer - dt * 0.4);
-  for (const c of crowd.base) {
-    const y = c.y + 0.3 + Math.max(0, Math.sin(t * c.sp + c.ph)) * (0.04 + crowd.cheer * 0.35);
-    _q.setFromAxisAngle(_yAxis, Math.atan2(c.x, c.z));
-    _m.compose(_p.set(c.x, y, c.z), _q, _one); crowd.bodies.setMatrixAt(c.k, _m);
-    _m.compose(_p.set(c.x, y + 0.45, c.z), _q, _one); crowd.heads.setMatrixAt(c.k, _m);
-  }
-  crowd.bodies.instanceMatrix.needsUpdate = crowd.heads.instanceMatrix.needsUpdate = true;
+  crowd.view.cheer = crowd.cheer; crowd.view.update(t, dt);
+  if (audio.ctx) voice().bed(crowd.cheer);
   for (const f of torches) f.material.emissiveIntensity = 1.3 + Math.random() * 0.9; // candles flicker inside the pumpkins
   for (const l of torchLights) l.intensity = 6 + Math.random() * 2.5;
   for (const o of ghosts) {
@@ -1098,6 +1084,10 @@ const menu = (() => {
 let ws = null, myId = null, connected = false, leaving = false, pingTimer = 0;
 const pings = [], netStats = { show: false, late: 0, frames: 0, worst: 0, fps: 0, worstShown: 0, since: 0 };
 let prev = null, cur = null, prevT = 0, curT = 0, mySpawn = -1;
+// Watching from the stands: your seat (an angle around the arena, from the server), what you'll throw
+// next, and when you last threw. lastAction: the last time the fighters did anything worth cheering.
+let mySeat = null, seated = false, throwKind = 'tomato', thrownAt = -1e9, lastAction = 0;
+const spectating = () => !!cur && !cur.players.some((p) => p && p.id === myId);
 function connect(name, room, practice = false) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws?room=${encodeURIComponent(room)}&name=${encodeURIComponent(name)}${practice ? '&practice=1' : ''}`);
@@ -1109,7 +1099,7 @@ function connect(name, room, practice = false) {
 function onServerMessage(data) {
   {
     const m = JSON.parse(data);
-    if (m.t === 'welcome') { myId = m.id; if (m.rtc) openFastLane(); return; }
+    if (m.t === 'welcome') { myId = m.id; mySeat = Number.isFinite(m.seat) ? m.seat : null; if (m.rtc) openFastLane(); return; }
     if (m.t === 'rtc-answer') { if (fast.pc) fast.pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => closeFastLane()); return; }
     if (m.t === 'e') { for (const ev of m.ev) { handleEvent(ev); noteEvent(ev); } return; }
     if (m.t === 'pong') { pings.push(performance.now() - m.c); if (pings.length > 5) pings.shift(); pred.rtt = [...pings].sort((x, y) => x - y)[pings.length >> 1]; return; }
@@ -1191,6 +1181,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'F3' && !e.repeat) { netStats.show = !netStats.show; e.preventDefault(); }
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
   if (e.code === 'KeyQ' && !e.repeat) feintNow();
+  if (spectating() && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) throwKind = ['tomato', 'rock', 'cabbage'][Number(e.code.slice(5)) - 1];
   if (e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1237,6 +1228,7 @@ addEventListener('mousedown', (e) => {
   if (!joined || menu.isOpen()) return;
   audio.init();
   if (!locked()) { lockPointer(); return; }
+  if (spectating()) { if (e.button === 0) throwThing(); return; }
   if (e.button === 0) {
     // Moving the mouse as you click picks that side, even with a short, unhurried motion.
     const mx = recentMoves.reduce((a, m) => a + m[1], 0), my = recentMoves.reduce((a, m) => a + m[2], 0);
@@ -1253,6 +1245,15 @@ addEventListener('mouseup', (e) => {
   if (e.button === 0 && atkHeld) { atkHeld = false; send({ t: 'release' }); }
   if (e.button === 2) blockHeld = false;
 });
+// A spectator's throw: at whatever the crosshair is on, on the arena floor (or a fighter's height).
+function throwThing() {
+  const now = performance.now();
+  if (now - thrownAt < THROW_EVERY * 1000 || !cur || cur.phase !== 'fight') return;
+  const o = camera.position, d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+  let t = d.y < -0.02 ? (o.y - 1) / -d.y : 18; // where the crosshair meets chest height, or straight out
+  const at = [o.x + d.x * t, d.y < -0.02 ? 1 : Math.max(0, o.y + d.y * t), o.z + d.z * t];
+  thrownAt = now; send({ t: 'throw', kind: throwKind, at });
+}
 // Block is right click only; Shift is sprint.
 const isBlocking = () => blockHeld;
 const isSprinting = () => keys.has('ShiftLeft') || keys.has('ShiftRight');
@@ -1327,38 +1328,81 @@ function handleEvent(ev) {
       audio.hitFor(ev.weapon); if (ev.zm >= 1.25) audio.thud();
       if (Math.random() < 0.6) sfx.play('grunt', 0.5, 1, 0.05); // the one who got hit, if there are recordings of grunts
       if (mine) { shake = ev.zm >= 1.25 ? 0.1 : 0.06; hurtFlash = ev.zm >= 1.25 ? 0.7 : 0.5; }
-      crowd.cheer = Math.min(1, crowd.cheer + 0.25);
+      crowd.cheer = Math.min(1, crowd.cheer + 0.25); lastAction = performance.now();
+      if (ev.zm >= 1.25) voice().ooh(); else if (Math.random() < 0.35) voice().cheer(0.5);
       break;
     case 'sever': {
       const gib = spawnGib(ev); if (mine && ev.part === 'head') myHeadGib = gib;
-      blood.burst(V(ev.pos), 110, V(ev.vel).normalize(), 1.4); audio.squelch(); audio.cheer();
+      blood.burst(V(ev.pos), 110, V(ev.vel).normalize(), 1.4); audio.squelch(); voice().scream(); voice().cheer(1.2);
       { const k = knights.get(ev.by); if (k) k.bladeBlood = Math.min(0.95, k.bladeBlood + 0.3); }
       crowd.cheer = 1;
       if (mine) { shake = 0.12; hurtFlash = 1; }
       break;
     }
-    case 'parry': audio.clang(); if (ev.by === myId) shake = 0.05;
+    case 'parry': audio.clang(); if (ev.by === myId) shake = 0.05; lastAction = performance.now(); if (Math.random() < 0.3) voice().ooh();
       for (let i = 0; i < 20; i++) sparks.spawn(V(ev.pos));
       break;
-    case 'chamber': audio.clang(); audio.clang();
+    case 'chamber': audio.clang(); audio.clang(); voice().cheer(0.7); crowd.cheer = Math.min(1, crowd.cheer + 0.4);
       for (let i = 0; i < 30; i++) sparks.spawn(V(ev.pos));
       break;
     case 'guardbreak': audio.thud(); if (mine) shake = 0.08; break;
     case 'kickSwing': audio.whoosh('low'); break;
     case 'plate': audio.clang(); break; // click
     case 'spikes': audio.thud(); audio.clang(); break;
-    case 'pendHit': audio.thud(); if (mine) shake = 0.12; break;
-    case 'burn': audio.whoosh('low'); if (mine) { shake = 0.05; hurtFlash = 0.4; } break;
-    case 'kickMiss': audio.whoosh('low'); if (mine) shake = 0.05; break;
-    case 'kick': audio.thud(); setTimeout(() => audio.thud(), 300); // the boot, then the body hitting the floor
+    case 'pendHit': audio.thud(); voice().scream(); voice().ooh(); crowd.cheer = 1; if (mine) shake = 0.12; break;
+    case 'burn': audio.whoosh('low'); voice().scream(); if (mine) { shake = 0.05; hurtFlash = 0.4; } break;
+    case 'kickMiss': audio.whoosh('low'); voice().laugh(); if (mine) shake = 0.05; break;
+    case 'kick': audio.thud(); setTimeout(() => audio.thud(), 300); voice().laugh(); voice().cheer(0.6); lastAction = performance.now(); // the boot, then the body hitting the floor
       if (mine) { shake = 0.1; hurtFlash = 0.4; } break;
-    case 'death': audio.slide(); break;
+    case 'death': audio.slide(); voice().cheer(1.5); crowd.cheer = 1; break;
+    case 'toss': thrown.toss(ev); crowd.view.throwFrom(ev.pos[0], ev.pos[2]); break;
+    case 'land': thrown.end(ev.pid); if (ev.kind === 'tomato') { blood.decal(ev.pos[0], ev.pos[2], 0.12); audio.squelch(); } else audio.step(0.3); break;
+    case 'pelt':
+      thrown.end(ev.pid);
+      if (ev.kind === 'tomato') { blood.burst(V(ev.pos), 14, new THREE.Vector3(0, 0.3, 0), 0.6); audio.squelch(); voice().laugh(); if (mine && ev.part === 'head') splat.hit(); }
+      else { audio.thud(); voice().ooh(); if (mine) shake = ev.kind === 'cabbage' ? 0.08 : 0.05; }
+      if (ev.by) toast(`${ev.kind === 'tomato' ? '🍅' : ev.kind === 'rock' ? '🪨' : '🥬'} ${ev.by} hit ${p ? p.name : 'a fighter'}${ev.part === 'head' ? ' in the head' : ''}!`);
+      break;
     case 'jump': if (mine) audio.boing(1); break;
     case 'hop': audio.boing(1.6, mine ? 0.12 : 0.06); break;
-    case 'roundEnd': audio.cheer(); crowd.cheer = 1; break;
+    case 'roundEnd': voice().cheer(1.3); crowd.cheer = 1; break;
+    case 'matchEnd': voice().cheer(2); break;
     case 'round': audio.howl(); clearGibs(); blood.clearDecals(); myHeadGib = null; for (const k of knights.values()) k.bladeBlood = 0; break;
     case 'spin': wheel.start(ev); break;
   }
+}
+
+// A tomato in the face: juicy red splatters over your view that slowly slide off.
+const splat = (() => {
+  let blobs = [], t0 = -1e9;
+  return {
+    hit() { t0 = performance.now(); blobs = Array.from({ length: 9 }, () => ({ x: rnd(0.15, 0.85), y: rnd(0.15, 0.8), r: rnd(0.04, 0.13), seeds: Array.from({ length: 7 }, () => [rnd(0, 6.28), rnd(0.4, 1.1), rnd(0.3, 0.8)]) })); },
+    draw(w, h) {
+      const age = (performance.now() - t0) / 1000; if (age > 3.5) return;
+      const a = age < 2 ? 0.9 : 0.9 * (1 - (age - 2) / 1.5), slide = age * age * 0.012;
+      hctx.save(); hctx.globalAlpha = a;
+      for (const b of blobs) {
+        const x = b.x * w, y = (b.y + slide) * h, R = b.r * Math.min(w, h);
+        hctx.fillStyle = '#b81a0a'; hctx.beginPath(); hctx.arc(x, y, R, 0, Math.PI * 2); hctx.fill();
+        for (const [ang, d, s] of b.seeds) { hctx.beginPath(); hctx.arc(x + Math.cos(ang) * R * d * 1.3, y + Math.sin(ang) * R * d * 1.3, R * s * 0.45, 0, Math.PI * 2); hctx.fill(); }
+        hctx.fillStyle = '#e8d070'; for (const [ang, d] of b.seeds.slice(0, 3)) { hctx.beginPath(); hctx.ellipse(x + Math.cos(ang) * R * d * 0.5, y + Math.sin(ang) * R * d * 0.5, R * 0.08, R * 0.05, ang, 0, Math.PI * 2); hctx.fill(); } // seeds
+      }
+      hctx.restore();
+    },
+  };
+})();
+// Short messages at the top of the screen, like who just hit whom with a tomato.
+const toasts = [];
+function toast(msg) { toasts.push({ msg, t: performance.now() }); if (toasts.length > 4) toasts.shift(); }
+function drawToasts(w) {
+  const now = performance.now();
+  for (let i = toasts.length - 1; i >= 0; i--) if (now - toasts[i].t > 3500) toasts.splice(i, 1);
+  toasts.forEach((o, i) => text(o.msg, w / 2, 118 + i * 22, 16, '#ffd23f'));
+}
+// Nothing happening for a while in a fight: the crowd gets bored and boos.
+function crowdBoredom() {
+  if (!cur || cur.phase !== 'fight') { lastAction = performance.now(); return; }
+  if (performance.now() - lastAction > 12000) { voice().boo(); lastAction = performance.now() - 4000; }
 }
 
 const sparks = (() => {
@@ -1544,7 +1588,19 @@ function drawHud(players, me, opp) {
     // Blocking a heavy still staggers you briefly; anything else is a real stun.
     if (me.stun > 0) text(me.staggered ? 'Heavy blow! Guard staggered' : '💫 STUNNED 💫', w / 2, h / 2 + 115, me.staggered ? 20 : 26, '#ffd23f');
     if (me.dead) text(me.headless ? "You've lost your head!" : 'You have been slain.', w / 2, h / 2 + 140, 30, '#ff6b6b');
-  } else if (cur.players.some(Boolean)) text('Spectating', w / 2, 90, 18);
+  } else if (cur.players.some(Boolean)) {
+    text('Spectating', w / 2, 90, 18);
+    if (locked()) {
+      // Your seat in the stands: a crosshair, what you're holding, and when you can throw again.
+      const cx = w / 2, cy = h / 2;
+      hctx.beginPath(); hctx.arc(cx, cy, 2.5, 0, Math.PI * 2); hctx.fillStyle = '#ffffffc0'; hctx.fill();
+      ['tomato', 'rock', 'cabbage'].forEach((k, i) => text(`[${i + 1}] ${['🍅', '🪨', '🥬'][i]} ${k[0].toUpperCase() + k.slice(1)}`, cx + (i - 1) * 150, h - 64, k === throwKind ? 20 : 16, k === throwKind ? '#ffd23f' : '#ffffffa0'));
+      const k = Math.min(1, (performance.now() - thrownAt) / (THROW_EVERY * 1000));
+      text(cur.phase !== 'fight' ? 'Throw once the fight starts' : k < 1 ? 'Grabbing another…' : 'Click to throw', cx, h - 38, 15, k < 1 ? '#ffffff90' : '#fff');
+    }
+  }
+  splat.draw(w, h);
+  drawToasts(w, h);
 
   if (cur.phase === 'spin' || wheel.visible()) wheel.draw(w, h, players);
   else if (cur.phase === 'over') {
@@ -1563,9 +1619,10 @@ function drawHud(players, me, opp) {
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   // A round with a special rule keeps a reminder at the top of the screen.
   { const M = roundMod(); if (M !== MODS.none && cur.phase !== 'waiting' && !(cur.phase === 'spin' || wheel.visible())) text(`${M.emoji} ${M.name}`, w / 2, 84, 18, '#7dff9a'); }
-  if (joined && !locked() && !menu.isOpen()) text('Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
+  if (joined && !locked() && !menu.isOpen()) text(spectating() && cur.players.some(Boolean) ? 'Click to take your seat in the stands and throw things' : 'Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
-  hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block · Q feint · F kick · Esc settings', w / 2, h - 14);
+  if (spectating()) hctx.fillText('Mouse look around · 1 2 3 pick what to throw · click throw · Esc settings', w / 2, h - 14);
+  else hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block · Q feint · F kick · Esc settings', w / 2, h - 14);
 }
 
 // ---------- the Wheel of Weapons ----------
@@ -1747,6 +1804,12 @@ function frame(now) {
     const k = Math.min(1, me.deathT / 1.2), f = forward(me.yaw);
     camera.position.set(me.x - f[0] * 2.6 * k, 1.6 + 1.4 * k, me.z - f[2] * 2.6 * k);
     camera.lookAt(me.x, 0.3, me.z);
+  } else if (locked() && mySeat !== null) {
+    // Spectator in your seat: look around with the mouse, and throw things.
+    if (!seated) { seated = true; look.yaw = Math.atan2(Math.cos(mySeat), Math.sin(mySeat)); look.pitch = -0.3; const [x, , z] = seatAt(mySeat); crowd.view.hideNear(x, z); }
+    const [x, , z] = seatAt(mySeat);
+    camera.position.set(x, STANDS_Y + 1.25, z);
+    camera.rotation.set(Math.max(-1.4, Math.min(1.2, look.pitch)), look.yaw, 0);
   } else {
     // Spectator: slow orbit around the action.
     const a = clock * 0.12, fs = players.filter(Boolean);
@@ -1757,7 +1820,7 @@ function frame(now) {
   if (debugCam) { camera.position.set(...debugCam.pos); camera.lookAt(...debugCam.at); } // ?debug only: a free camera for screenshots
   hurtFlash = Math.max(0, hurtFlash - dt * 1.5);
 
-  blood.step(dt); stepGibs(dt); sparks.step(dt); updateCrowd(clock, dt); wheel.step(dt);
+  blood.step(dt); stepGibs(dt); sparks.step(dt); updateCrowd(clock, dt); wheel.step(dt); thrown.step(dt); crowdBoredom();
 
   watchFrameRate(dt);
   if (useComposer()) { grade.uniforms.hurt.value = Math.min(1, hurtFlash); composer.render(); } else renderer.render(scene, camera);

@@ -14,7 +14,12 @@ several takes per folder sound best. Any kind without a folder uses the built-in
 | `step/` | footsteps |
 | `gore/` | a limb or head comes off |
 | `grunt/` | the person who got hit (optional) |
+| `cheer/` | the crowd roars (a hit, a kill, the end of a round) |
+| `scream/` | someone in the crowd screams (a limb comes off, the pendulum, fire) |
+| `ooh/` | the crowd winces at a big hit |
+| `boo/` | the crowd gets bored when nothing happens for a while |
+| `laugh/` | the crowd laughs (a tomato hits, a kick misses) |
 
-Formats: `.ogg`, `.mp3`, `.wav`, `.m4a`, `.flac` or `.webm`. Short files (under a second) work best.
+Formats: `.ogg`, `.mp3`, `.wav`, `.m4a`, `.flac` or `.webm`. Short files (under a second) work best, except the crowd folders, where 1 to 3 seconds sounds right.
 The sound files themselves aren't kept in git, so a `git pull` never touches them.
 Free CC0 packs that fit well: Kenney's "Impact Sounds" and "RPG Audio" (kenney.nl).

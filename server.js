@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch, hazardSnapshot } from './shared/sim.js';
+import { newRoom, newPlayer, stepRoom, snapshotPlayer, tryAttack, startHold, releaseHold, kick, feint, voteRematch, hazardSnapshot, toss, seatAt, THROWN, THROW_EVERY, ARENA_R } from './shared/sim.js';
 import { makeBot, botThink } from './bot.js';
 import { rtcReady, answerOffer } from './rtc.js';
 
@@ -154,7 +154,9 @@ server.on('upgrade', (req, socket) => {
   // Strictly 1v1: the first two players fight, everyone after that watches.
   const slot = freeSlot();
   if (slot >= 0) { room.fighters[slot] = me; room.phase = 'waiting'; }
-  ws.send(JSON.stringify({ t: 'welcome', id: me.id, room: room.name, fighter: slot >= 0, rtc: rtcReady() }));
+  // Everyone gets a seat in the stands to watch (and throw) from, clear of the two gates.
+  do ws.seat = Math.random() * Math.PI * 2; while (Math.abs(Math.cos(ws.seat)) < 0.15);
+  ws.send(JSON.stringify({ t: 'welcome', id: me.id, room: room.name, fighter: slot >= 0, rtc: rtcReady(), seat: ws.seat }));
   console.log(`[${room.name}] ${name} joined as ${slot >= 0 ? 'fighter' : 'spectator'}`);
 
   ws.onmessage = (raw) => handle(raw, (s) => ws.send(s));
@@ -183,6 +185,14 @@ server.on('upgrade', (req, socket) => {
     else if (m.t === 'release') releaseHold(me);
     else if (m.t === 'kick') kick(me, room);
     else if (m.t === 'feint') feint(me, room);
+    else if (m.t === 'throw') {
+      // Only spectators throw, at most one thing every THROW_EVERY seconds, and only into the arena.
+      const now = Date.now(), at = Array.isArray(m.at) && m.at.length === 3 && m.at.every(Number.isFinite) ? m.at : null;
+      if (room.fighters.includes(me) || room.phase !== 'fight' || !at || !THROWN[m.kind] || now - (ws.thrownAt || 0) < THROW_EVERY * 1000) return;
+      const d = Math.hypot(at[0], at[2]), k = d > ARENA_R - 0.3 ? (ARENA_R - 0.3) / d : 1;
+      ws.thrownAt = now;
+      toss(room, m.kind, seatAt(ws.seat), [at[0] * k, Math.max(0, Math.min(2.5, at[1])), at[2] * k], me.name);
+    }
     else if (m.t === 'rematch') voteRematch(room, me);
     else if (m.t === 'hitch' && !(ws.hitchLogged > Date.now() - 1000)) {
       // A player's browser reporting a freeze: 'frame' is their computer stalling, 'update' their connection.

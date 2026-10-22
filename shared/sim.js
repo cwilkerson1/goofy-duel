@@ -560,6 +560,7 @@ function damage(room, att, def, partName, amount, sk, zone = {}) {
   // A fresh stump gushes at first, then slows to a trickle that never quite stops.
   if (partName !== 'head') { def.bleed += BLEED.fresh; def.wounds = (def.wounds || 0) + 1; }
   const ra = rightOf(att.yaw), side = att.sdir === 'left' ? 1 : att.sdir === 'right' ? -1 : rand(-0.5, 0.5);
+  room.crowdHeat = Math.min(1, (room.crowdHeat || 0) + 0.6);
   room.events.push({
     t: 'sever', id: def.id, by: att.id, part: partName, pos: at, sword: hadSword, weapon: def.weapon, color: def.color,
     vel: [fa[0] * rand(2, 4) + ra[0] * side * 3, rand(4, 6.5), fa[2] * rand(2, 4) + ra[2] * side * 3], yaw: def.yaw,
@@ -747,6 +748,7 @@ export function stepRoom(room, dt) {
     stepPlayer(room, p, dt);
   }
   if (room.hz) { room.hz.t += dt; if (room.phase === 'fight') stepHazards(room, fighters, dt); }
+  stepThrown(room, fighters, dt);
   if (fighters.length === 2) {
     const [a, b] = fighters;
     resolveSwing(room, a, b); resolveSwing(room, b, a);
@@ -795,6 +797,7 @@ export function voteRematch(room, p) {
 function startRound(room, resetScores) {
   room.fighters.forEach((p, i) => { if (p) { resetFighter(p, i); p.rematch = false; if (resetScores) p.score = 0; } });
   // Spin the wheel of fortune for everyone's weapon this round.
+  room.thrown = [];
   // A fresh arena of traps every round.
   const L = rollLayout();
   room.hz = { L, t: 0, plates: L.plates.map(() => null), hit: L.plates.map(() => []) };
@@ -874,6 +877,74 @@ function stepHazards(room, fighters, dt) {
     }
   });
 }
+// ---------- things the crowd throws ----------
+// Spectators (and, now and then, the crowd itself) lob things from the stands. Each one flies on a plain
+// arc, so browsers draw it from the 'toss' event alone; 'pelt' (it hit someone) and 'land' end it.
+// dmg: to the part it hits (never enough to take a limb off). flinch: interrupts a wind-up. knock: shove.
+export const THROWN = {
+  tomato:  { w: 5, dmg: 0, flinch: 0, knock: 0 },
+  rock:    { w: 3, dmg: 4, flinch: 0.25, knock: 0.5 },
+  cabbage: { w: 2, dmg: 1, flinch: 0.35, knock: 1.6 },
+};
+export const STANDS_R = ARENA_R + 3.2, STANDS_Y = 3.4, THROW_G = 14, THROW_EVERY = 1.2;
+// Where someone sitting at this angle around the stands throws from.
+export const seatAt = (a) => [Math.cos(a) * STANDS_R, STANDS_Y, Math.sin(a) * STANDS_R];
+let tossSeq = 0;
+// Throw from `from` to land on `to`, a little off target like a real throw.
+export function toss(room, kind, from, to, by) {
+  if (!THROWN[kind]) return;
+  const t = to.map((v, i) => v + (i === 1 ? 0 : rand(-0.35, 0.35)));
+  const d = Math.hypot(t[0] - from[0], t[2] - from[2]), T = clamp(d / 11, 0.75, 1.5);
+  const vel = [(t[0] - from[0]) / T, (t[1] - from[1]) / T + 0.5 * THROW_G * T, (t[2] - from[2]) / T];
+  const pr = { id: ++tossSeq, kind, pos: from.slice(), vel, by, age: 0 };
+  (room.thrown ||= []).push(pr);
+  room.events.push({ t: 'toss', pid: pr.id, kind, pos: from.map(r3), vel: vel.map(r3), by });
+}
+export function randomThrown() {
+  const ks = Object.keys(THROWN), total = ks.reduce((n, k) => n + THROWN[k].w, 0);
+  let r = Math.random() * total;
+  for (const k of ks) { r -= THROWN[k].w; if (r <= 0) return k; }
+  return 'tomato';
+}
+function stepThrown(room, fighters, dt) {
+  // The crowd throws on its own sometimes, more when there's blood.
+  room.crowdHeat = Math.max(0, (room.crowdHeat || 0) - dt * 0.15);
+  if (room.phase === 'fight' && Math.random() < dt * (0.12 + room.crowdHeat * 0.6)) {
+    const f = pick(fighters.filter((p) => !p.dead));
+    if (f) {
+      const a = Math.atan2(f.z, f.x) + rand(-0.9, 0.9);
+      toss(room, randomThrown(), seatAt(a), [f.x + f.vx * 0.8 + rand(-1.2, 1.2), 1.2, f.z + f.vz * 0.8 + rand(-1.2, 1.2)], null);
+    }
+  }
+  if (!room.thrown || !room.thrown.length) return;
+  const keep = [];
+  for (const pr of room.thrown) {
+    const prev = pr.pos.slice();
+    pr.age += dt; pr.vel[1] -= THROW_G * dt;
+    for (let i = 0; i < 3; i++) pr.pos[i] += pr.vel[i] * dt;
+    let hit = null;
+    if (pr.age > 0.1) for (const p of fighters) {
+      if (p.dead) continue;
+      const sk = skeleton(p), shapes = partShapes(sk);
+      const part = ALL_PARTS.find((k) => !p.parts[k].cut && segSegDist(prev, pr.pos, shapes[k].a, shapes[k].b) <= shapes[k].r + 0.09);
+      if (part) { hit = { p, part }; break; }
+    }
+    if (hit) {
+      const { p, part } = hit, T = THROWN[pr.kind], P = p.parts[part];
+      if (T.dmg) P.hp = part === 'torso' ? P.hp - T.dmg : Math.max(1, P.hp - T.dmg);
+      if (T.flinch) interrupt(p, T.flinch);
+      const l = Math.hypot(pr.vel[0], pr.vel[2]) || 1; p.vx += (pr.vel[0] / l) * T.knock; p.vz += (pr.vel[2] / l) * T.knock;
+      if (P.hp <= 0) { P.hp = 0; kill(room, p, 'stoned by the crowd'); }
+      room.events.push({ t: 'pelt', pid: pr.id, id: p.id, kind: pr.kind, part, pos: pr.pos.map(r3), by: pr.by });
+      continue;
+    }
+    if (pr.pos[1] <= 0.04 && Math.hypot(pr.pos[0], pr.pos[2]) < ARENA_R) { pr.pos[1] = 0.04; room.events.push({ t: 'land', pid: pr.id, kind: pr.kind, pos: pr.pos.map(r3) }); continue; }
+    if (pr.pos[1] < -2 || pr.age > 4) continue;
+    keep.push(pr);
+  }
+  room.thrown = keep;
+}
+
 // What browsers need to draw the traps: the layout, the clock, and how long ago each plate clicked.
 export function hazardSnapshot(room) {
   const H = room.hz; if (!H) return null;

@@ -232,6 +232,20 @@ Each round lays out the arena differently:
 Traps only hurt once the fight starts. The practice knight steps out of the pendulum's way and away
 from vents, but walks straight onto spike plates.
 
+## The crowd
+
+The stands are packed with people who bounce on the benches, leap up waving when blood is spilled,
+and make noise: a constant murmur, roars and cheers, screams when a limb comes off or someone gets
+caught by a trap, an "ooooh" at a big hit, laughter when a tomato lands, and boos when nothing has
+happened for a while. The voices are synthesized; recorded crowd sounds can replace them (see Sound effects).
+
+**Throwing things.** Anyone watching (the third person in an arena onwards) gets a seat in the stands.
+Click to take it, look around with the mouse, pick **1** 🍅 tomato, **2** 🪨 rock or **3** 🥬 cabbage,
+and click to throw at whatever the crosshair is on, about one throw a second. A tomato splatters (in the
+face, it covers the fighter's screen for a few seconds), a rock stings and interrupts a wind-up, and a
+cabbage knocks you back a step. Nothing thrown can take off a limb. The crowd also throws things on its
+own now and then, more after someone loses a limb.
+
 ## Sound effects
 
 Every sound is synthesized in the browser unless recorded ones are installed. Put audio files in
@@ -250,6 +264,7 @@ shared/hazards.js  The arena's traps: layout, pendulum, vents and spike plates (
 public/index.html  Start screen
 public/client.js   3D arena, knights, blood and flying limbs, HUD, sounds (all synthesized), input
 public/hazards.js  Drawing the traps: pillars, the pendulum, fire and smoke, spikes
+public/crowd.js    The people in the stands, their voices, and the things they throw
 public/music/      Fight music: drop audio files here
 public/vendor/     Three.js 0.169 and its glow/post-processing add-ons (MIT licence)
 mac/               launchd file for running it as a background service on macOS
