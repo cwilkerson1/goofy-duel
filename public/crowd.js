@@ -173,6 +173,13 @@ export function makeCrowdVoice(audio, sfx) {
         voice(t + rnd(0, 0.35), { f0, f1: f0 * rnd(1.05, 1.35), vowel: pick(['ah', 'eh', 'ah', 'oh']), dur: d, vol: 0.022 * size, attack: 0.15, pan: rnd(-1, 1) });
       });
     },
+    // The bull: a deep, rough bellow.
+    bellow() {
+      if (!ok() || sfx.play('bull', 0.7)) return; const t = ctx().currentTime, f0 = rnd(68, 82);
+      voice(t, { f0, f1: f0 * 0.75, vowel: 'oo', dur: 1.1, vol: 0.14, attack: 0.08, vib: 9 });
+      voice(t, { f0: f0 * 2.01, f1: f0 * 1.5, vowel: 'oh', dur: 1.0, vol: 0.05, attack: 0.1, vib: 9 });
+      rush(t, 0.9, 0.08, 400);
+    },
     // A fighter bellowing a taunt: one big voice, close by.
     yell(low = true) {
       if (!ok() || sfx.play('taunt', 0.7)) return; const t = ctx().currentTime, f0 = low ? rnd(105, 135) : rnd(200, 250);

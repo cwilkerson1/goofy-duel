@@ -6,10 +6,9 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, MODS, seatAt, STANDS_Y, THROW_EVERY, TAUNT_LINES } from '/shared/sim.js';
+import { ARENA_R, ARM, HEAD_R, LEG, TORSO, PART_MAX, WIN_SCORE, STAM_MAX, WEAPONS, WHEEL, skeleton, forward, isHeavy, kickCurve, tumble, swordLocal, tm, T, swordArm, punchHand, seatAt, STANDS_Y, THROW_EVERY, TAUNT_LINES } from '/shared/sim.js';
 import { makePredictor } from '/shared/predict.js';
 import { makeHazardView } from '/hazards.js';
-import { TRAPS } from '/shared/hazards.js';
 import { makeCrowd, makeThrownView, makeCrowdVoice } from '/crowd.js';
 import { buildWeapon, knightGeometry, UPPER_ARM, FOREARM, THIGH, SHIN } from '/models.js';
 
@@ -1351,6 +1350,11 @@ function handleEvent(ev) {
     case 'kickSwing': audio.whoosh('low'); break;
     case 'plate': audio.clang(); break; // click
     case 'spikes': audio.thud(); audio.clang(); break;
+    case 'swept': audio.thud(); voice().ooh(); voice().laugh(); if (mine) shake = 0.1; break;
+    case 'bullGate': audio.clang(); audio.thud(); voice().cheer(1); crowd.cheer = 1; break;
+    case 'bullCharge': voice().bellow(); break;
+    case 'gored': audio.thud(); setTimeout(() => audio.thud(), 350); voice().scream(); voice().cheer(1.2); crowd.cheer = 1; if (mine) { shake = 0.15; hurtFlash = 0.8; } break;
+    case 'bullWall': audio.thud(); if (findP(myId) && Math.hypot(findP(myId).x - ev.pos[0], findP(myId).z - ev.pos[2]) < 6) shake = 0.08; break;
     case 'pendHit': audio.thud(); voice().scream(); voice().ooh(); crowd.cheer = 1; if (mine) shake = 0.12; break;
     case 'burn': audio.whoosh('low'); voice().scream(); if (mine) { shake = 0.05; hurtFlash = 0.4; } break;
     case 'kickMiss': audio.whoosh('low'); voice().laugh(); if (mine) shake = 0.05; break;
@@ -1519,10 +1523,15 @@ function hazardNow() {
   const renderT = performance.now() - B.offset - B.delay;
   let i = B.snaps.length - 1;
   while (i > 0 && B.snaps[i - 1].t > renderT) i--;
-  const a = B.snaps[Math.max(0, i - 1)].m.trap, b = B.snaps[i].m.trap, bt = B.snaps[i].t, at = B.snaps[Math.max(0, i - 1)].t;
+  const a = B.snaps[Math.max(0, i - 1)].m.trap; let b = B.snaps[i].m.trap; const bt = B.snaps[i].t, at = B.snaps[Math.max(0, i - 1)].t;
   if (!b) return { hz: cur.trap, t: cur.trap.t };
   if (!a || a.L.id !== b.L.id || bt === at) return { hz: b, t: b.t + Math.max(0, Math.min(EXTRAPOLATE_MS, renderT - bt)) / 1000 };
-  const k = (renderT - at) / (bt - at);
+  const k = Math.max(0, Math.min(1, (renderT - at) / (bt - at)));
+  // The bull moves on its own, so it's blended between updates like a fighter.
+  if (a.bull && b.bull) {
+    const dy = Math.atan2(Math.sin(b.bull.yaw - a.bull.yaw), Math.cos(b.bull.yaw - a.bull.yaw));
+    b = { ...b, bull: { ...(k < 0.5 ? a.bull : b.bull), x: a.bull.x + (b.bull.x - a.bull.x) * k, z: a.bull.z + (b.bull.z - a.bull.z) * k, yaw: a.bull.yaw + dy * k } };
+  }
   return { hz: b, t: a.t + (b.t - a.t) * Math.max(0, Math.min(1, k)) + Math.max(0, Math.min(EXTRAPOLATE_MS, renderT - bt)) / 1000 };
 }
 
@@ -1642,8 +1651,6 @@ function drawHud(players, me, opp) {
   } else if (cur.phase !== 'fight') text(cur.msg, w / 2, h * 0.32, cur.phase === 'roundEnd' ? 46 : 34, cur.phase === 'roundEnd' ? '#ffd23f' : '#fff');
   else if (fightFlash > 0) text('FIGHT!', w / 2, h * 0.32, 52, '#ffd23f');
   // A round with a special rule keeps a reminder at the top of the screen.
-  { const M = roundMod(), Tr = cur.trap && TRAPS[cur.trap.L.kind], show = cur.phase !== 'waiting' && !(cur.phase === 'spin' || wheel.visible());
-    if (show) text([M !== MODS.none && `${M.emoji} ${M.name}`, Tr && `${Tr.emoji} ${Tr.name}`].filter(Boolean).join('   ·   '), w / 2, 84, 18, '#7dff9a'); }
   if (joined && !locked() && !menu.isOpen()) text(spectating() && cur.players.some(Boolean) ? 'Click to take your seat in the stands and throw things' : 'Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
   if (spectating()) hctx.fillText('Mouse look around · 1 2 3 pick what to throw · click throw · Esc settings', w / 2, h - 14);
@@ -1669,7 +1676,7 @@ const wheel = (() => {
       // Rotate so `inside` ends under the pointer, after several full turns.
       const target = POINTER - inside, turns = 6 + Math.floor(Math.random() * 3);
       const base = angle - (angle % (Math.PI * 2));
-      st = { t0: performance.now(), dur: (ev.dur - 1.3) * 1000, from: angle, to: base + turns * Math.PI * 2 + target, mine, result: ev.result, mod: MODS[ev.mod] || MODS.none, trap: TRAPS[ev.trap], landed: false };
+      st = { t0: performance.now(), dur: (ev.dur - 1.3) * 1000, from: angle, to: base + turns * Math.PI * 2 + target, mine, result: ev.result, landed: false };
       audio.drumroll(st.dur / 1000);
     },
     visible() { return st && performance.now() - st.t0 < st.dur + 1300; },
@@ -1689,12 +1696,7 @@ const wheel = (() => {
       const R = Math.min(w, h) * 0.3, cx = w / 2, cy = h * 0.47;
       hctx.fillStyle = 'rgba(20,12,35,0.55)'; hctx.fillRect(0, 0, w, h);
       const bob = Math.sin(now / 120) * 4;
-      // Once it lands, a special round rule takes over the title so it can't be missed.
-      if (st.landed && st.mod !== MODS.none) {
-        const pop = 1 + Math.max(0, 0.3 - (now - st.t0 - st.dur) / 1000);
-        text(`${st.mod.emoji} ${st.mod.name.toUpperCase()} ${st.mod.emoji}`, cx, cy - R - 60, 34 * pop, '#7dff9a');
-        text(st.mod.line, cx, cy - R - 32, 17, '#fff');
-      } else text('🎡 WHEEL OF WEAPONS 🎡', cx, cy - R - 46 + bob, 38, '#ffd23f');
+      text('🎡 WHEEL OF WEAPONS 🎡', cx, cy - R - 46 + bob, 38, '#ffd23f');
       // Rim with chasing lights.
       hctx.beginPath(); hctx.arc(cx, cy, R + 16, 0, Math.PI * 2); hctx.fillStyle = '#5a3d1e'; hctx.fill();
       for (let i = 0; i < 28; i++) {
@@ -1726,11 +1728,6 @@ const wheel = (() => {
         text(`${isMe ? 'YOU GOT' : 'THEY GOT'}: ${W.emoji} ${W.name}!`, cx, cy + R + 56, 34 * pop, st.mine === 'excalibur' ? '#ffd700' : '#fff');
         text(W.line, cx, cy + R + 86, 18, '#c9bfe0');
         text(swingFeel(W), cx, cy + R + 140, 15, '#ffb060');
-        // This round's trap: beside the wheel on a wide screen, under it on a narrow one.
-        if (st.trap) {
-          const side = w - (cx + R + 40) > 300, tx = side ? cx + R + 40 : cx, ty = side ? cy - 12 : cy + R + 166, al = side ? 'left' : 'center';
-          text(`TRAP: ${st.trap.emoji} ${st.trap.name}`, tx, ty, 24, '#ff8a5a', al); text(st.trap.line, tx, ty + 24, 14, '#fff', al);
-        }
         for (const p of players) if (p && p.id !== myId && st.result[p.id] && isMe) { const o = WEAPONS[st.result[p.id]]; text(`${p.name} got ${o.emoji} ${o.name}`, cx, cy + R + 114, 16, TEAM_CSS[p.color]); }
       } else text('Spinning…', cx, cy + R + 56, 24, '#fff');
       for (const c of confetti) { hctx.fillStyle = c.c; hctx.save(); hctx.translate(c.x, c.y); hctx.rotate(c.r); hctx.fillRect(-4, -2, 8, 4); hctx.restore(); }
@@ -1763,8 +1760,6 @@ let lastView = null; // ?debug only: the players as last drawn
 let last = performance.now(), clock = 0, lastPhase = '', wasHeavy = false;
 // When the duel is won, everyone sees the result for a few seconds and then goes back to the start screen.
 let arenaName = '', copiedAt = 0;
-// The current round's rule, from either fighter (they always share it).
-const roundMod = () => MODS[cur && (cur.players.find(Boolean) || {}).mod] || MODS.none;
 function frame(now) {
   const ft = now - last, dt = Math.max(0, Math.min(0.05, ft / 1000)); last = now; clock += dt;
   netStats.frames++; netStats.worst = Math.max(netStats.worst, ft);
@@ -1782,7 +1777,6 @@ function frame(now) {
   if (debugPose && me) { me = { ...me, ...debugPose }; players[players.findIndex((p) => p && p.id === myId)] = me; } // ?debug only
   { const H = hazardNow(); hazView.update(H.hz, H.t, dt, me, audio); pred.hzL = cur && cur.trap ? cur.trap.L : null; }
   for (const p of players) if (p && p.burn > 0 && !p.dead) hazView.burning([p.x, p.y, p.z], dt);
-  { const d = roundMod().fog && cur && cur.phase !== 'spin' ? 0.14 : 0.02; scene.fog.density += (d - scene.fog.density) * Math.min(1, dt * 1.5); } // fog rolls in and out
   if (cur && cur.phase !== lastPhase) {
     if (cur.phase === 'fight') { fightFlash = 1; music.start(cur.song); }
     else music.stop();

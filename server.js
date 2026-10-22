@@ -135,7 +135,7 @@ function wsAccept(req, socket) {
 const rooms = new Map();
 let nextId = 1;
 // WEAPON=scythe npm start  makes the wheel always land on one weapon (handy for practice).
-const getRoom = (name) => { if (!rooms.has(name)) rooms.set(name, Object.assign(newRoom(name), { clients: new Set(), forceWeapon: process.env.WEAPON, forceMod: process.env.MOD })); return rooms.get(name); };
+const getRoom = (name) => { if (!rooms.has(name)) rooms.set(name, Object.assign(newRoom(name), { clients: new Set(), forceWeapon: process.env.WEAPON, forceTrap: process.env.TRAP })); return rooms.get(name); };
 
 server.on('upgrade', (req, socket) => {
   const url = new URL(req.url, 'http://x');

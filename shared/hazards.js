@@ -7,6 +7,8 @@
 //   middle, right across the line between the two spawns.
 // - Fire vents in the floor hiss and glow for a moment, then roar up in a column of flame.
 // - Spike plates: step on one and it clicks; a moment later spikes shoot up through it.
+// - The sweeper: a spiked iron arm turns around a post in the middle at shin height. Jump it.
+// - The bull: a gate opens and a bull comes out, picks the nearest fighter, paws the ground, and charges.
 
 export const HAZ = {
   // pivotY/len: where the arm hangs from and how long it is. amp: how far it swings each way (radians).
@@ -19,6 +21,13 @@ export const HAZ = {
   // half: half-width of the plate. delay: from the click to the spikes. up: how long they stay up.
   // rearm: how long before it can click again. dmg: to each leg.
   PLATE: { half: 0.55, delay: 0.4, up: 0.9, rearm: 3, dmg: 19 },
+  // hubR: the post in the middle. len: how far the arm reaches. y/r: its height and thickness (low enough
+  // to jump). period: seconds per turn. dmg: to each leg it catches. knock: how hard it sweeps you over.
+  SWEEP: { hubR: 0.45, len: 10.3, y: 0.4, r: 0.13, period: 6.5, dmg: 14, knock: 5, cool: 1 },
+  // enter: seconds into the fight before the gate opens. aim: pawing the ground before a charge. speed:
+  // charging speed (m/s). rest: catching its breath after hitting the wall. r: how close its horns must
+  // get. dmg: to the body. knock: how far it throws you. turn: how fast it turns to face its target.
+  BULL: { enter: 3, walk: 2.6, aim: 1.2, speed: 8.5, rest: 1.6, r: 0.75, dmg: 24, knock: 9, turn: 2.6, far: 16 },
 };
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -26,11 +35,13 @@ export const TRAPS = {
   pendulum: { emoji: '🪓', name: 'The Pendulum', line: 'A giant blade swings through the middle.' },
   fire:     { emoji: '🔥', name: 'Fire Vents', line: 'Grates in the floor erupt in flame. Watch for the glow.' },
   spikes:   { emoji: '📌', name: 'Spike Plates', line: 'Step on a plate and spikes punch up a moment later.' },
+  sweeper:  { emoji: '🌀', name: 'The Sweeper', line: 'A spiked arm turns around the arena at shin height. Jump it!' },
+  bull:     { emoji: '🐂', name: 'The Bull', line: 'A gate opens and a bull charges whoever is closest.' },
 };
 
 // A new arena. Fighters spawn at (0, ±4), so nothing is placed on top of them.
-export function rollLayout(rnd = Math.random, last = null) {
-  const kinds = Object.keys(TRAPS).filter((k) => k !== last), kind = kinds[Math.floor(rnd() * kinds.length)];
+export function rollLayout(rnd = Math.random, last = null, force = null) {
+  const kinds = Object.keys(TRAPS).filter((k) => k !== last), kind = TRAPS[force] ? force : kinds[Math.floor(rnd() * kinds.length)];
   const ang = (rnd() - 0.5) * 0.9; // the pendulum's line runs roughly across the gap between the spawns
   const ax = [Math.cos(ang), Math.sin(ang)];
   const pillars = kind !== 'pendulum' ? [] : [1, -1].map((s) => [r2(ax[0] * HAZ.PILLAR.at * s), r2(ax[1] * HAZ.PILLAR.at * s)]);
@@ -47,7 +58,8 @@ export function rollLayout(rnd = Math.random, last = null) {
   };
   const vents = kind !== 'fire' ? [] : place(5, HAZ.VENT.r, 2.2, 8.6).map(([x, z], i) => ({ x, z, ph: r2((i * HAZ.VENT.cycle) / 5 + rnd() * 1.2) }));
   const plates = kind !== 'spikes' ? [] : place(7, HAZ.PLATE.half * 1.5, 1.6, 8.8).map(([x, z]) => ({ x, z }));
-  return { id: Math.floor(rnd() * 1e9), kind, ang: r2(ang), pillars, vents, plates };
+  const spin = rnd() < 0.5 ? 1 : -1, gate = rnd() < 0.5 ? 1 : -1; // which way the sweeper turns; which gate the bull uses
+  return { id: Math.floor(rnd() * 1e9), kind, ang: r2(ang), pillars, vents, plates, spin, gate };
 }
 
 // Where the pendulum blade is at time t: its centre, the way its edge runs (along the swing), its swing
@@ -74,11 +86,18 @@ export function spikes(since) {
   return u < 0.06 ? u / 0.06 : u < P.up ? 1 : Math.max(0, 1 - (u - P.up) / 0.25);
 }
 
-// Keep someone out of the pillars (x, z changed in place).
+// The sweeper arm's angle at time t (radians, round the y axis from +x towards +z), and its speed.
+export function sweeper(L, t) {
+  const w = (2 * Math.PI) / HAZ.SWEEP.period;
+  return { a: L.spin * w * t + L.ang, w: L.spin * w };
+}
+
+// Keep someone out of the pillars (and the sweeper's post); x, z changed in place.
 export function pushOutOfPillars(L, p, bodyR = 0.3) {
   if (!L) return;
-  for (const [x, z] of L.pillars) {
-    const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz) || 1e-3, min = HAZ.PILLAR.r + bodyR;
+  const posts = L.kind === 'sweeper' ? [[0, 0, HAZ.SWEEP.hubR]] : L.pillars;
+  for (const [x, z, pr] of posts) {
+    const dx = p.x - x, dz = p.z - z, d = Math.hypot(dx, dz) || 1e-3, min = (pr ?? HAZ.PILLAR.r) + bodyR;
     if (d < min) { p.x = x + (dx / d) * min; p.z = z + (dz / d) * min; }
   }
 }

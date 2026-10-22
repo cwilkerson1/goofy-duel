@@ -198,28 +198,9 @@ opens the invite link from **🔗 Copy invite link**, which is `/?room=WOLF-42`)
 picks another, so several pairs can fight at once without bumping into each other. While you wait in the
 arena, the code is on screen and **C** copies the link.
 
-## Round rules
-
-The wheel also rolls a rule for the round, shared by both fighters. About a third of rounds are
-standard; the rest are one of these:
-
-| Rule | What changes |
-|---|---|
-| 🌙 Moon Gravity | Jump about twice as high and fall slowly |
-| 🍷 Glass Knights | Everything hits twice as hard, and a clean head shot can kill outright |
-| 🩸 Bloodbath | Wounds bleed three times as fast |
-| 🌫️ Pea Soup | Thick fog rolls in |
-| 👊 Bare Knuckle | Both fighters get fists |
-| 🪞 Mirror Match | Both fighters get the same weapon |
-| 🫁 Iron Lungs | Half stamina costs, triple recovery |
-| ⚡ Double Time | Every wind-up, swing and recovery is 30% faster |
-
-The rule's name stays at the top of the screen for the whole round. To test one, start the server with
-`MOD=glass` (or any rule's key from `MODS` in `shared/sim.js`).
-
 ## Traps
 
-Each round rolls one kind of trap (never the same kind twice in a row), shown on the wheel and at the top of the screen, and lays it out differently:
+Each round rolls one kind of trap (never the same kind twice in a row) and lays it out differently. Nobody is told which one it is; you find out when it starts moving:
 
 - **The pendulum.** Two stone pillars hold a beam across the arena, and a huge axe blade swings from
   it right through the middle, across the line between the spawns. It cuts whatever it catches and
@@ -229,9 +210,19 @@ Each round rolls one kind of trap (never the same kind twice in a row), shown on
   flame. Standing in it burns, and you keep smouldering for a moment after you get out.
 - **Spike plates.** Step on one and it clicks. A moment later spikes punch up through it and into the
   legs of whoever is standing there, which could be your opponent if you knock them onto it.
+- **The sweeper.** A spiked iron arm turns around a post in the middle of the arena at shin height,
+  reaching all the way to the wall. Jump it. If it catches your legs it cuts them and sweeps you off
+  your feet, and anyone lying on the floor gets caught again next time round.
+- **The bull.** A few seconds into the fight a gate opens and a bull trots in. It turns to face
+  whoever is closest, paws the ground and snorts, then charges in a straight line. Get out of its path
+  (or bait it into your opponent). Its horns throw you across the arena. It stops at the wall or when
+  it runs out of steam, gets its breath back, and picks a new target.
 
-Traps only hurt once the fight starts. The practice knight steps out of the pendulum's way and away
-from vents, but walks straight onto spike plates.
+Traps only hurt once the fight starts. The practice knight steps out of the pendulum's way, away
+from vents and out of the bull's path, and usually jumps the sweeper, but walks straight onto spike plates.
+
+**Practice one trap:** `TRAP=bull npm start` makes every round use that trap (`pendulum`, `fire`,
+`spikes`, `sweeper` or `bull`).
 
 ## The crowd
 
@@ -261,10 +252,10 @@ server.js          HTTP + WebSocket server and the 60 Hz game loop
 rtc.js             The WebRTC fast lane: game updates and movement over a UDP-like data channel
 shared/sim.js      Combat rules, body poses, 3D hit detection (used by server and browser)
 shared/predict.js  Moves your own knight instantly in the browser, before the server confirms it
-shared/hazards.js  The arena's traps: layout, pendulum, vents and spike plates (server and browser)
+shared/hazards.js  The arena's traps: layout, pendulum, vents, spike plates, sweeper, bull (server and browser)
 public/index.html  Start screen
 public/client.js   3D arena, knights, blood and flying limbs, HUD, sounds (all synthesized), input
-public/hazards.js  Drawing the traps: pillars, the pendulum, fire and smoke, spikes
+public/hazards.js  Drawing the traps: pillars, the pendulum, fire and smoke, spikes, the sweeper, the bull
 public/crowd.js    The people in the stands, their voices, and the things they throw
 public/music/      Fight music: drop audio files here
 public/vendor/     Three.js 0.169 and its glow/post-processing add-ons (MIT licence)

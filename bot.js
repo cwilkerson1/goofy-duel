@@ -2,7 +2,7 @@
 // only through the same inputs (move, look, block, wind up, release, feint, kick), with a human-ish
 // reaction time and the odd mistake, so it can be beaten by reading it.
 import { ARM, DIRS, MIRROR, newPlayer, startHold, releaseHold, feint, kick, tm, wpn, voteRematch, forward, rightOf, taunt, beaten } from './shared/sim.js';
-import { HAZ, pendulum, vent } from './shared/hazards.js';
+import { HAZ, pendulum, vent, sweeper } from './shared/hazards.js';
 
 const BOT_NAMES = ['Sir Practice', 'The Training Knight', 'Sir Strawman', 'Dummy the Bold'];
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -91,6 +91,21 @@ function dodgeTraps(me, room, i) {
   for (const v of L.vents) {
     const st = vent(v, H.t), dx = me.x - v.x, dz = me.z - v.z, d = Math.hypot(dx, dz) || 1e-3;
     if (st.s !== 'idle' && d < HAZ.VENT.r + 1) { wx += dx / d; wz += dz / d; }
+  }
+  // The sweeper: hop over the arm just before it gets here (and misjudge it now and then).
+  if (L.kind === 'sweeper' && me.onGround) {
+    const sw = sweeper(L, H.t), r = Math.hypot(me.x, me.z);
+    if (r < HAZ.SWEEP.len + 0.4) {
+      const rel = Math.atan2(Math.sin(Math.atan2(me.z, me.x) - sw.a), Math.cos(Math.atan2(me.z, me.x) - sw.a)) * Math.sign(sw.w);
+      const ahead = (rel < 0 ? rel + 2 * Math.PI : rel) / Math.abs(sw.w); // seconds until the arm reaches me
+      if (ahead < (me.botJump ??= 0.24 + Math.random() * 0.1)) { i.j = 1; me.botJump = Math.random() < 0.15 ? 0.6 : 0.24 + Math.random() * 0.1; }
+    }
+  }
+  // The bull: get out of its way when it's lining up on me or already coming.
+  const Bu = H.bull;
+  if (Bu && (Bu.s === 'aim' || Bu.s === 'charge')) {
+    const f = [-Math.sin(Bu.yaw), -Math.cos(Bu.yaw)], dx = me.x - Bu.x, dz = me.z - Bu.z, along = dx * f[0] + dz * f[1], side = -dx * f[1] + dz * f[0];
+    if (along > -1 && Math.abs(side) < 1.8 && along < (Bu.s === 'charge' ? 7 : 12)) { const s = side >= 0 ? 1 : -1; wx += -f[1] * s * 2; wz += f[0] * s * 2; }
   }
   if (!wx && !wz) return;
   const f = forward(me.yaw), r = rightOf(me.yaw), l = Math.hypot(wx, wz);

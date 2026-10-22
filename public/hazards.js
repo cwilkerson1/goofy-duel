@@ -1,7 +1,7 @@
 // Drawing the arena's traps (the rules are in shared/hazards.js). The layout arrives with every update;
 // a new one (a new round) rebuilds the scenery. Everything moving is posed from the hazard clock.
 import * as THREE from 'three';
-import { HAZ, pendulum, vent, spikes } from '/shared/hazards.js';
+import { HAZ, pendulum, vent, spikes, sweeper } from '/shared/hazards.js';
 
 // A soft round dot, for flame and smoke.
 function puffTexture() {
@@ -50,7 +50,7 @@ function crescent() {
 
 export function makeHazardView({ scene, MAT, stone, iron }) {
   const fire = particles(scene, 900, 0.75, true, puffTexture()), smoke = particles(scene, 300, 1.4, false, puffTexture());
-  let built = null, root = null, pend = null, vents = [], plates = [], lastTh = 0;
+  let built = null, root = null, pend = null, vents = [], plates = [], lastTh = 0, sweep = null, bull = null, lastRel = 0;
 
   function build(L) {
     if (root) { scene.remove(root); root.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
@@ -75,6 +75,26 @@ export function makeHazardView({ scene, MAT, stone, iron }) {
       const collar = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 0.14), iron), pend); collar.position.y = -P.len + 0.12;
       const blade = add(new THREE.Mesh(crescent(), MAT.steel), pend); blade.position.y = -P.len - 0.15;
     }
+    // The sweeper: an iron post in the middle and a spiked arm turning around it at shin height.
+    sweep = null;
+    if (L.kind === 'sweeper') {
+      const S = HAZ.SWEEP;
+      const post = add(new THREE.Mesh(new THREE.CylinderGeometry(S.hubR * 0.9, S.hubR, 1.1, 20), iron)); post.position.y = 0.55;
+      const cap = add(new THREE.Mesh(new THREE.CylinderGeometry(S.hubR * 1.15, S.hubR * 1.15, 0.12, 20), iron)); cap.position.y = 1.12;
+      sweep = new THREE.Group(); root.add(sweep);
+      const len = S.len - S.hubR, beam = add(new THREE.Mesh(new THREE.BoxGeometry(len, 0.17, 0.14), iron), sweep); beam.position.set(S.hubR + len / 2, S.y, 0);
+      const collar = add(new THREE.Mesh(new THREE.CylinderGeometry(S.hubR * 1.08, S.hubR * 1.08, 0.3, 20), iron), sweep); collar.position.y = S.y;
+      // Spikes along both faces, so it reads as dangerous from either side.
+      const cone = new THREE.ConeGeometry(0.035, 0.22, 6); cone.rotateX(Math.PI / 2); cone.translate(0, 0, 0.17);
+      const n = 26, sp = new THREE.InstancedMesh(cone, MAT.steel, n * 2), m = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), pos = new THREE.Vector3();
+      for (let i = 0; i < n; i++) for (const side of [1, -1]) {
+        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), side > 0 ? 0 : Math.PI);
+        m.compose(pos.set(S.hubR + 0.25 + (i / (n - 1)) * (len - 0.4), S.y + (i % 2 ? 0.04 : -0.04), 0), q, one); sp.setMatrixAt(i * 2 + (side > 0 ? 0 : 1), m);
+      }
+      sp.castShadow = true; sweep.add(sp);
+    }
+    // The bull (posed every frame in update).
+    bull = L.kind === 'bull' ? makeBull(root, iron) : null;
     // Fire vents: an iron grate over a glowing pit.
     vents = L.vents.map((v) => {
       const g = new THREE.Group(); g.position.set(v.x, 0, v.z); root.add(g);
@@ -115,6 +135,17 @@ export function makeHazardView({ scene, MAT, stone, iron }) {
         if (Math.sign(pd.th) !== Math.sign(lastTh) && me && Math.hypot(me.x, me.z) < 5) audio.whoosh('low');
         lastTh = pd.th;
       }
+      if (sweep) {
+        const sw = sweeper(L, t); sweep.rotation.y = -sw.a;
+        // Sparks where the tip scrapes past the wall, and a whoosh as the arm passes you.
+        if (Math.random() < dt * 40) { const c = Math.cos(sw.a), s = Math.sin(sw.a), R = HAZ.SWEEP.len; fire.spawn(c * R, HAZ.SWEEP.y, s * R, (Math.random() - 0.5) * 3, 1 + Math.random() * 2, (Math.random() - 0.5) * 3, 0.3, [1, 0.7, 0.3]); }
+        if (me) { const rel = Math.atan2(Math.sin(Math.atan2(me.z, me.x) - sw.a), Math.cos(Math.atan2(me.z, me.x) - sw.a)); if (Math.sign(rel) !== Math.sign(lastRel) && Math.abs(rel) < 1) audio.whoosh('low'); lastRel = rel; }
+      }
+      if (bull && hz.bull) {
+        const B = hz.bull; bull.pose(B, t, dt);
+        if (B.s === 'charge' && Math.random() < dt * 30) smoke.spawn(B.x + (Math.random() - 0.5) * 0.6, 0.1, B.z + (Math.random() - 0.5) * 0.6, 0, 0.6, 0, 0.9, [0.35, 0.28, 0.22]);
+        if (B.s === 'aim' && Math.random() < dt * 5) { const f = [-Math.sin(B.yaw), -Math.cos(B.yaw)]; smoke.spawn(B.x + f[0] * 1.3, 0.75, B.z + f[1] * 1.3, f[0] * 0.8, 0.2, f[1] * 0.8, 0.6, [0.5, 0.5, 0.5]); } // snorting steam
+      }
       for (const V of vents) {
         const st = vent(V.v, t);
         V.glow.material.opacity = st.s === 'warn' ? 0.25 + 0.5 * st.k : st.s === 'burn' ? 0.9 : 0.08 + 0.04 * Math.sin(t * 3 + V.v.x);
@@ -152,4 +183,46 @@ function holesTexture() {
   g.fillStyle = 'rgba(0,0,0,0.85)';
   for (let i = 0; i < 16; i++) { g.beginPath(); g.arc(((i % 4) + 0.5) * 32, (Math.floor(i / 4) + 0.5) * 32, 6, 0, Math.PI * 2); g.fill(); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+// A big black bull, built facing -z with its feet on the ground. pose() places it from the server's
+// state: galloping when it charges, trotting in, pawing the ground and tossing its head while it aims.
+function makeBull(root, iron) {
+  const hide = new THREE.MeshStandardMaterial({ color: 0x40291d, roughness: 0.8 }), horn = new THREE.MeshStandardMaterial({ color: 0xe8dcc0, roughness: 0.5 });
+  const nose = new THREE.MeshStandardMaterial({ color: 0x4a3028, roughness: 0.6 }), eye = new THREE.MeshBasicMaterial({ color: 0xff3010 });
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body); root.add(g);
+  const add = (geo, mat, parent, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+  const torso = add(new THREE.CapsuleGeometry(0.42, 1.1, 6, 14), hide, body, 0, 1.05, 0); torso.rotation.x = Math.PI / 2; torso.scale.set(1, 1, 1.15);
+  add(new THREE.SphereGeometry(0.5, 16, 12), hide, body, 0, 1.22, -0.45).scale.set(1, 1.05, 1.1); // the hump behind the neck
+  const head = new THREE.Group(); head.position.set(0, 1.2, -0.95); body.add(head);
+  add(new THREE.BoxGeometry(0.42, 0.42, 0.55), hide, head, 0, -0.05, -0.2);
+  add(new THREE.BoxGeometry(0.34, 0.26, 0.2), nose, head, 0, -0.16, -0.5);
+  for (const sd of [-1, 1]) {
+    add(new THREE.SphereGeometry(0.035, 8, 6), eye, head, sd * 0.2, 0.05, -0.32);
+    const hn = add(new THREE.ConeGeometry(0.06, 0.5, 8), horn, head, sd * 0.36, 0.17, -0.18);
+    hn.rotation.z = -sd * 1.1; hn.rotation.x = -0.5;
+  }
+  add(new THREE.TorusGeometry(0.07, 0.015, 6, 12), iron, head, 0, -0.27, -0.58).rotation.x = Math.PI / 2; // nose ring
+  const legs = [[-0.25, -0.55], [0.25, -0.55], [-0.25, 0.6], [0.25, 0.6]].map(([x, z]) => {
+    const L = new THREE.Group(); L.position.set(x, 0.85, z); body.add(L);
+    add(new THREE.CylinderGeometry(0.1, 0.07, 0.8, 8), hide, L, 0, -0.4, 0);
+    add(new THREE.CylinderGeometry(0.08, 0.09, 0.08, 8), nose, L, 0, -0.82, 0);
+    return L;
+  });
+  const tail = new THREE.Group(); tail.position.set(0, 1.25, 0.95); body.add(tail);
+  add(new THREE.CylinderGeometry(0.025, 0.02, 0.7, 6), hide, tail, 0, -0.35, 0);
+  let phase = 0;
+  return {
+    pose(B, t, dt) {
+      g.position.set(B.x, 0, B.z); g.rotation.y = B.yaw;
+      const speed = B.s === 'charge' ? 3.2 : B.s === 'enter' ? 1.4 : B.s === 'rest' ? 0 : 0.4;
+      phase += dt * speed * 6;
+      legs.forEach((L, i) => { L.rotation.x = Math.sin(phase + (i < 2 ? 0 : Math.PI) + (i % 2) * 0.6) * (B.s === 'charge' ? 0.7 : 0.35) * Math.min(1, speed); });
+      if (B.s === 'aim') legs[1].rotation.x = -0.4 + Math.sin(t * 14) * 0.6; // pawing the ground
+      body.position.y = B.s === 'charge' ? Math.abs(Math.sin(phase)) * 0.12 : 0;
+      head.rotation.x = B.s === 'charge' ? 0.45 : B.s === 'aim' ? 0.25 + Math.sin(t * 7) * 0.12 : B.s === 'rest' ? -0.1 + Math.sin(t * 4) * 0.05 : 0;
+      torso.scale.y = 1 + (B.s === 'rest' ? Math.sin(t * 6) * 0.04 : 0); // heaving after the wall
+      tail.rotation.z = Math.sin(t * (B.s === 'charge' ? 18 : 4)) * 0.4;
+    },
+  };
 }

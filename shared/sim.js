@@ -12,7 +12,7 @@
 // - Sprint (Shift) when idle and moving forward; it burns stamina.
 // - Attacking into an incoming swing from the matching side, just in time, is a chamber.
 
-import { HAZ, rollLayout, pendulum, vent, spikes, pushOutOfPillars } from './hazards.js';
+import { HAZ, rollLayout, pendulum, vent, spikes, sweeper, pushOutOfPillars } from './hazards.js';
 export const ARENA_R = 11;
 export const ARM = 0.6, BLADE = 0.95, HEAD_R = 0.14, TORSO = 0.6, LEG = 0.95;
 export const PARTS = ['head', 'torso', 'armR', 'armL', 'legR', 'legL'];
@@ -96,28 +96,6 @@ export const BLUNT = new Set(['hammer', 'mace', 'flail', 'fists']);
 // Where the best part of a weapon sits, handy for tuning reach.
 const sweetDist = (id) => { const z = HITBOX[id].reduce((a, b) => (b.m > a.m ? b : a)); return (z.a[1] + z.b[1]) / 2; };
 export const SPIN_TIME = 5.5;
-// Round rules: the wheel also rolls one of these each round, for both fighters (weight = how often).
-// dmg: damage multiplier. headCap: replaces HEAD_CAP. grav: gravity. bleed: bleeding multiplier.
-// tempo: every swing, wind-up and recovery takes this much of its normal time. stam: stamina costs.
-// regen: stamina recovery. fog: thick fog (drawn in the browser). weapon: 'fists' or 'mirror' (both the same).
-export const MODS = {
-  none:     { w: 6, emoji: '⚔️', name: 'Standard Rules', line: 'No tricks this round.' },
-  lowgrav:  { w: 2, emoji: '🌙', name: 'Moon Gravity', line: 'Jump high, fall slow.', grav: 5 },
-  glass:    { w: 2, emoji: '🍷', name: 'Glass Knights', line: 'Everything hits twice as hard. A clean head shot kills.', dmg: 2, headCap: 1.2 },
-  bleed:    { w: 2, emoji: '🩸', name: 'Bloodbath', line: 'Wounds bleed three times as fast.', bleed: 3 },
-  fog:      { w: 2, emoji: '🌫️', name: 'Pea Soup', line: 'Thick fog. Watch for the glint of steel.', fog: true },
-  fists:    { w: 1, emoji: '👊', name: 'Bare Knuckle', line: 'Weapons are banned. Fists only.', weapon: 'fists' },
-  mirror:   { w: 2, emoji: '🪞', name: 'Mirror Match', line: 'You both get the same weapon.', weapon: 'mirror' },
-  tireless: { w: 2, emoji: '🫁', name: 'Iron Lungs', line: 'Half stamina costs, triple recovery.', stam: 0.5, regen: 3 },
-  turbo:    { w: 2, emoji: '⚡', name: 'Double Time', line: 'Everything swings 30% faster.', tempo: 0.7 },
-};
-export const mod = (p) => MODS[p.mod] || MODS.none;
-export function rollMod() {
-  const ks = Object.keys(MODS), total = ks.reduce((t, k) => t + MODS[k].w, 0);
-  let r = Math.random() * total;
-  for (const k of ks) { r -= MODS[k].w; if (r <= 0) return k; }
-  return 'none';
-}
 export function rollWeapon() {
   const total = WHEEL.reduce((t, k) => t + WEAPONS[k].weight, 0);
   let r = Math.random() * total;
@@ -135,7 +113,7 @@ const HEAVY_TIME = { ACTIVE: 1.35, RECOVER: 1.2, CHAMBER: 1.35 };
 // Overall swing pace: every weapon's wind-up, swing and recovery is this much slower than its table
 // value, and the small ones (dagger, fists) a bit less so. The heavy-attack charge keeps its own timing.
 export const PACE = 1.5, SMALL_PACE = 1.2;
-export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' && PHASE[k] ? (wpn(p).small ? SMALL_PACE : PACE) : 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) * (mod(p).tempo ?? 1) // weapon-scaled timing
+export const tm = (p, k) => T[k] * (wpn(p)[PHASE[k]] ?? 1) * (k !== 'HEAVY_AT' && PHASE[k] ? (wpn(p).small ? SMALL_PACE : PACE) : 1) * (oneHanding(p) && PHASE[k] !== 'rec' ? 1.25 : 1) // weapon-scaled timing
   * (p.heavy && p.state !== 'hold' ? HEAVY_TIME[k] ?? 1 : 1);
 
 // Bleeding, in health per second: each lost limb starts at `fresh` and eases down to `trickle`.
@@ -492,7 +470,7 @@ export function resetFighter(p, side) {
   p.spawnSeq = (p.spawnSeq || 0) + 1; // tells the client to snap its camera to the new spawn
 }
 
-const spend = (p, n) => { p.stam = Math.max(0, p.stam - n * (mod(p).stam ?? 1)); p.stamWait = 0.7; };
+const spend = (p, n) => { p.stam = Math.max(0, p.stam - n); p.stamWait = 0.7; };
 const canAct = (p) => !p.dead && p.stun <= 0 && !(p.downT > 0);
 
 // Start drawing the weapon back. The direction can still change until release.
@@ -660,7 +638,7 @@ function stepPlayer(room, p, dt) {
     p.blocking = !!p.input.b && p.state === 'idle' && p.stun <= 0 && !(p.downT > 0);
 
     if (p.stamWait > 0) p.stamWait -= dt;
-    else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * (mod(p).regen ?? 1) * dt);
+    else if (!p.blocking) p.stam = Math.min(STAM_MAX, p.stam + 20 * dt);
 
     const legs = legsLeft(p);
     const goal = moveGoal(p, p.input.mf, p.input.ms, p.yaw, p.blocking, p.input.s), ml = goal.moving ? 1 : 0;
@@ -676,11 +654,11 @@ function stepPlayer(room, p, dt) {
       p.vy = 2.6; p.onGround = false; // one leg left: hop everywhere
       room.events.push({ t: 'hop', id: p.id });
     }
-    if (p.bleed) { p.bleed = Math.max((p.wounds || 0) * BLEED.trickle, p.bleed - BLEED.ease * dt); p.parts.torso.hp -= p.bleed * (mod(p).bleed ?? 1) * dt; }
+    if (p.bleed) { p.bleed = Math.max((p.wounds || 0) * BLEED.trickle, p.bleed - BLEED.ease * dt); p.parts.torso.hp -= p.bleed * dt; }
     if (p.bruise) { p.bruise = Math.max(p.bruiseAche || 0, p.bruise - BRUISE.ease * dt); p.parts.torso.hp -= p.bruise * dt; } // internal bruising from blunt hits
     if (p.parts.torso.hp <= 0) { p.parts.torso.hp = 0; kill(room, p, p.bleed >= (p.bruise || 0) ? 'bled out' : 'bruised to death'); }
   }
-  p.vy -= (mod(p).grav ?? 14) * dt;
+  p.vy -= 14 * dt;
   p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
   if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
   const d = Math.hypot(p.x, p.z), maxR = ARENA_R - 0.5;
@@ -764,8 +742,8 @@ function resolveSwing(room, att, def) {
   const n = [def.x - att.x, def.z - att.z], nl = Math.hypot(...n) || 1;
   const closing = ((att.vx - def.vx) * n[0] + (att.vz - def.vz) * n[1]) / nl;
   const W = wpn(att);
-  let dmg = DMG_SCALE * rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * (oneHanding(att) ? 0.7 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35) * (mod(att).dmg ?? 1);
-  if (part === 'head') dmg = Math.min(dmg, PART_MAX.head * (mod(att).headCap ?? HEAD_CAP)); // no single blow to the head kills
+  let dmg = DMG_SCALE * rand(...SWING[att.sdir].dmg) * W.dmg * (part === 'torso' ? 1 : part === 'head' ? 1 + (W.sever - 1) * 0.3 : W.sever) * w.m * mul * (att.heavy ? 1.5 : 1) * (oneHanding(att) ? 0.7 : 1) * clamp(1 + closing * 0.1, 0.75, 1.35);
+  if (part === 'head') dmg = Math.min(dmg, PART_MAX.head * HEAD_CAP); // no single blow to the head kills
   damage(room, att, def, part, dmg, skd, w);
 }
 
@@ -831,28 +809,23 @@ export function voteRematch(room, p) {
 
 function startRound(room, resetScores) {
   room.fighters.forEach((p, i) => { if (p) { resetFighter(p, i); p.rematch = false; if (resetScores) p.score = 0; } });
-  // Spin the wheel of fortune for everyone's weapon this round.
   room.thrown = []; room.favour = {};
   // A fresh arena of traps every round.
-  const L = rollLayout(Math.random, room.hz && room.hz.L.kind);
+  const L = rollLayout(Math.random, room.hz && room.hz.L.kind, room.forceTrap); // forceTrap pins one, for testing
   room.hz = { L, t: 0, plates: L.plates.map(() => null), hit: L.plates.map(() => []) };
-  room.fighters.forEach((p) => { if (p) { p.pendCool = 0; p.burnT = 0; } });
-  // ...and the round's rule (room.forceMod pins one, for testing).
-  room.mod = MODS[room.forceMod] ? room.forceMod : rollMod();
-  const M = MODS[room.mod], shared = rollWeapon(), result = {};
-  room.fighters.forEach((p) => { if (p) {
-    p.mod = room.mod;
-    p.weapon = WEAPONS[room.forceWeapon] ? room.forceWeapon : M.weapon === 'fists' ? 'fists' : M.weapon === 'mirror' ? shared : rollWeapon();
-    result[p.id] = p.weapon;
-  } });
+  // The bull waits behind its gate, facing into the arena.
+  if (L.kind === 'bull') room.hz.bull = { x: 0, z: L.gate * (ARENA_R + 1.5), yaw: L.gate > 0 ? 0 : Math.PI, s: 'wait', st: 0, hit: [], run: 0 };
+  room.fighters.forEach((p) => { if (p) { p.pendCool = 0; p.sweepCool = 0; p.burnT = 0; } });
+  const result = {};
+  room.fighters.forEach((p) => { if (p) { p.weapon = WEAPONS[room.forceWeapon] ? room.forceWeapon : rollWeapon(); result[p.id] = p.weapon; } });
   room.phase = 'spin'; room.timer = SPIN_TIME; room.msg = 'Spinning the Wheel of Weapons…';
   room.song = Math.floor(Math.random() * 1e9); // everyone's browser plays the same fight track from this
-  room.events.push({ t: 'round' }, { t: 'spin', result, mod: room.mod, trap: L.kind, dur: SPIN_TIME });
+  room.events.push({ t: 'round' }, { t: 'spin', result, dur: SPIN_TIME });
 }
 
 // ---------- traps (see hazards.js) ----------
 // Traps hurt like a weapon would, from an attacker that isn't there.
-const trap = (yaw, weapon) => ({ id: -1, yaw, weapon, heavy: true, sdir: 'over', mod: 'none' });
+const trap = (yaw, weapon) => ({ id: -1, yaw, weapon, heavy: true, sdir: 'over' });
 const ALL_PARTS = ['head', 'torso', 'armR', 'armL', 'legR', 'legL'];
 function stepHazards(room, fighters, dt) {
   const H = room.hz, L = H.L, t = H.t;
@@ -873,6 +846,25 @@ function stepHazards(room, fighters, dt) {
     if (!p.dead && !(p.downT > 0)) { p.downT = 1e-3; p.fallYaw = yaw; p.blocking = false; if (p.state === 'kick') p.state = 'idle'; }
     room.events.push({ t: 'pendHit', id: p.id, pos: pd.pos });
   }
+  // The sweeper: the arm takes your legs out from under you, unless you're in the air.
+  if (L.kind === 'sweeper') {
+    const S = HAZ.SWEEP, sw = sweeper(L, t), c = Math.cos(sw.a), sn = Math.sin(sw.a);
+    const arm = { a: [c * S.hubR, S.y, sn * S.hubR], b: [c * S.len, S.y, sn * S.len], r: S.r };
+    const push = [-sn * Math.sign(sw.w), c * Math.sign(sw.w)], yaw = Math.atan2(-push[0], -push[1]);
+    for (const p of fighters) {
+      if (p.dead) continue;
+      p.sweepCool = Math.max(0, (p.sweepCool || 0) - dt);
+      if (p.sweepCool > 0) continue;
+      const sk = skeleton(p), hit = touching(arm, p, partShapes(sk), ['legR', 'legL']);
+      if (!hit.length) continue;
+      p.sweepCool = S.cool;
+      for (const k of hit) damage(room, trap(yaw, 'flail'), p, k, S.dmg, sk, { m: 1, tag: 'sweeper' });
+      p.vx += push[0] * S.knock; p.vz += push[1] * S.knock; p.vy = Math.max(p.vy, 2.5); p.onGround = false;
+      if (!p.dead && !(p.downT > 0)) { p.downT = 1e-3; p.fallYaw = yaw; p.blocking = false; if (p.state === 'kick') p.state = 'idle'; }
+      room.events.push({ t: 'swept', id: p.id, pos: [p.x, S.y, p.z] });
+    }
+  }
+  if (H.bull) stepBull(room, H.bull, fighters, dt);
   // Fire vents: standing in the flame burns, and you keep smouldering for a moment after you get out.
   for (const p of fighters) {
     if (p.dead) continue;
@@ -985,10 +977,48 @@ function stepThrown(room, fighters, dt) {
   room.thrown = keep;
 }
 
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// The bull: out through its gate, then over and over: turn to face the nearest fighter while pawing the
+// ground, charge in a straight line, and stop to catch its breath when it hits the wall.
+function stepBull(room, B, fighters, dt) {
+  const S = HAZ.BULL, alive = fighters.filter((p) => !p.dead);
+  B.st += dt;
+  const f = forward(B.yaw), dist = (p) => Math.hypot(p.x - B.x, p.z - B.z);
+  const target = alive.reduce((a, p) => (!a || dist(p) < dist(a) ? p : a), null);
+  if (B.s === 'wait') { if (B.st >= S.enter) { B.s = 'enter'; B.st = 0; room.events.push({ t: 'bullGate', pos: [B.x, 0, B.z] }); } }
+  else if (B.s === 'enter') { B.x += f[0] * S.walk * dt; B.z += f[2] * S.walk * dt; if (Math.hypot(B.x, B.z) < ARENA_R - 2.5) { B.s = 'aim'; B.st = 0; } }
+  else if (B.s === 'aim') {
+    if (target) { const d = wrapA(Math.atan2(-(target.x - B.x), -(target.z - B.z)) - B.yaw); B.yaw = wrapA(B.yaw + clamp(d, -S.turn * dt, S.turn * dt)); }
+    if (B.st >= S.aim) { B.s = 'charge'; B.st = 0; B.hit = []; B.run = 0; room.events.push({ t: 'bullCharge', pos: [B.x, 0, B.z] }); }
+  } else if (B.s === 'charge') {
+    const v = S.speed * Math.min(1, 0.35 + B.st * 2.5);
+    B.x += f[0] * v * dt; B.z += f[2] * v * dt; B.run += v * dt;
+    const hx = B.x + f[0] * 0.95, hz = B.z + f[2] * 0.95;
+    for (const p of alive) {
+      if (B.hit.includes(p.id) || Math.hypot(p.x - hx, p.z - hz) > S.r + 0.3 || p.y > 1.1) continue;
+      B.hit.push(p.id);
+      const sk = skeleton(p);
+      damage(room, trap(B.yaw, 'hammer'), p, 'torso', S.dmg, sk, { m: 1, tag: 'bull' });
+      p.vx += f[0] * S.knock; p.vz += f[2] * S.knock; p.vy = Math.max(p.vy, 6); p.onGround = false;
+      if (!p.dead && !(p.downT > 0)) { p.downT = 1e-3; p.fallYaw = B.yaw; p.blocking = false; if (p.state === 'kick') p.state = 'idle'; }
+      room.events.push({ t: 'gored', id: p.id, pos: [hx, 1, hz] });
+    }
+    const d = Math.hypot(B.x, B.z), maxR = ARENA_R - 1.1;
+    if (d > maxR) { B.x *= maxR / d; B.z *= maxR / d; B.s = 'rest'; B.st = 0; room.events.push({ t: 'bullWall', pos: [B.x, 0, B.z] }); }
+    else if (B.run > S.far) { B.s = 'rest'; B.st = 0; }
+  } else if (B.s === 'rest' && B.st >= S.rest) { B.s = 'aim'; B.st = 0; }
+  // Its body is solid: you can't walk through it.
+  if (B.s !== 'wait') for (const p of alive) {
+    const dx = p.x - B.x, dz = p.z - B.z, dd = Math.hypot(dx, dz) || 1e-3, min = 1.0;
+    if (dd < min) { p.x = B.x + (dx / dd) * min; p.z = B.z + (dz / dd) * min; }
+  }
+}
+
 // What browsers need to draw the traps: the layout, the clock, and how long ago each plate clicked.
 export function hazardSnapshot(room) {
   const H = room.hz; if (!H) return null;
-  return { L: H.L, t: r3(H.t), pl: H.plates.map((at) => (at == null ? -1 : r3(H.t - at))) };
+  const B = H.bull;
+  return { L: H.L, t: r3(H.t), pl: H.plates.map((at) => (at == null ? -1 : r3(H.t - at))), bull: B ? { x: r2(B.x), z: r2(B.z), yaw: r2(B.yaw), s: B.s, st: r2(B.st) } : null };
 }
 
 export function newRoom(name) {
@@ -1003,7 +1033,7 @@ export function snapshotPlayer(p) {
     heavy: p.heavy, blocking: p.blocking, sprinting: !!p.sprinting, comboOk: !!p.comboOk, stun: r2(p.stun), staggered: p.stun > 0 && p.staggered, stam: Math.round(p.stam),
     ack: p.ack || 0, queued: !!p.queued,
     dead: p.dead, deathT: r2(p.deathT), headless: p.headless, downT: r2(p.downT || 0), fallYaw: r2(p.fallYaw ?? 0),
-    weapon: p.weapon, mod: p.mod || 'none', burn: r2(p.burnT || 0), tk: p.tauntKind || 0, walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
+    weapon: p.weapon, burn: r2(p.burnT || 0), tk: p.tauntKind || 0, walk: r2(p.walk), score: p.score, rematch: !!p.rematch, color: p.color, bleed: p.bleed, bruise: r2(p.bruise || 0), spawn: p.spawnSeq || 0,
     parts: Object.fromEntries(PARTS.map((k) => [k, { hp: Math.max(0, Math.round(p.parts[k].hp)), cut: p.parts[k].cut }])),
   };
 }
