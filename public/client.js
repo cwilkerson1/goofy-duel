@@ -1159,7 +1159,7 @@ function closeFastLane() { try { fast.pc && fast.pc.close(); } catch {} fast.pc 
 // ---------- input: Last Oasis-style mouse direction ----------
 // Moving the mouse picks a side (left / right / up) that sticks until you move another way.
 // Hold left click to draw back on that side (locked in at the click), release to swing.
-// Hold right click and steer toward the incoming blade to block. Right click or Q during an attack feints.
+// Hold right click and steer toward the incoming blade to block. Right click during an attack cancels it.
 const keys = new Set();
 const look = { yaw: 0, pitch: 0 };
 const flick = { x: 0, y: 0 };
@@ -1180,7 +1180,6 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyC' && !e.repeat && cur && cur.phase === 'waiting') copyInvite(arenaName).then(() => { copiedAt = performance.now(); });
   if (e.code === 'F3' && !e.repeat) { netStats.show = !netStats.show; e.preventDefault(); }
   if ((e.code === 'KeyF' || e.code === 'KeyE') && !e.repeat) send({ t: 'kick' });
-  if (e.code === 'KeyQ' && !e.repeat) feintNow();
   if (e.code === 'KeyT' && !e.repeat && !spectating()) send({ t: 'taunt' });
   if (spectating() && ['Digit1', 'Digit2', 'Digit3'].includes(e.code)) throwKind = ['tomato', 'rock', 'cabbage'][Number(e.code.slice(5)) - 1];
   if (e.code === 'Space') e.preventDefault();
@@ -1239,7 +1238,7 @@ addEventListener('mousedown', (e) => {
     // Pressed while the last swing is still going: the server remembers it and starts it the moment it can.
     if (s && !s.dead && ['idle', 'active', 'recover'].includes(s.state) && s.stam >= 5) swingIntent = { pressT: performance.now(), made: performance.now(), relT: null, b: isBlocking(), q: s.state !== 'idle', seq: holdSeq, dir };
   }
-  if (e.button === 2) { blockHeld = true; aimGuardAt(dir); if (atkHeld || swingIntent) feintAt = performance.now(); }
+  if (e.button === 2) { blockHeld = true; aimGuardAt(dir); feintAt = performance.now(); swingIntent = null; }
   if (e.button === 3 || e.button === 4) send({ t: 'kick' });
 });
 addEventListener('mouseup', (e) => {
@@ -1258,9 +1257,8 @@ function throwThing() {
 // Block is right click only; Shift is sprint.
 const isBlocking = () => blockHeld;
 const isSprinting = () => keys.has('ShiftLeft') || keys.has('ShiftRight');
-// Cancel the attack you're making (a feint). Right click during an attack does the same, on the server.
+// When right click last went down: the server cancels any attack in progress, so show that straight away.
 let feintAt = -1e9;
-function feintNow() { feintAt = performance.now(); swingIntent = null; send({ t: 'feint' }); }
 
 // Your own guard and swings are shown the moment you act, instead of a round trip to the server
 // later: the newest server state, run forward, plus your block, guard side and wind-up predicted
@@ -1295,7 +1293,7 @@ function predictMyAction(p, now) {
     const go = I.relT === null ? Infinity : Math.max(I.relT, I.pressT + tm(o, 'DRAW') * 1000);
     if (now < go) Object.assign(o, { state: 'hold', st: (now - I.pressT) / 1000, sdir: I.dir, heavy: false, blocking: false });
     else Object.assign(o, { state: 'active', st: (now - go) / 1000, sdir: I.dir, saim: I.aim, heavy: (go - I.pressT) / 1000 >= tm(o, 'HEAVY_AT'), blocking: false });
-  } else if (now - feintAt < wait && (o.state === 'hold' || (o.state === 'active' && s.st < tm(o, 'ACTIVE') * T.FEINT_IN))) Object.assign(o, { state: 'idle', st: 0, heavy: false });
+  } else if (now - feintAt < wait && (o.state === 'hold' || o.state === 'active')) Object.assign(o, { state: 'idle', st: 0, heavy: false });
   else if (o.state === 'idle' && free) Object.assign(o, { blocking: isBlocking(), gdir: dir });
   return o;
 }
@@ -1654,7 +1652,7 @@ function drawHud(players, me, opp) {
   if (joined && !locked() && !menu.isOpen()) text(spectating() && cur.players.some(Boolean) ? 'Click to take your seat in the stands and throw things' : 'Click to fight (the mouse looks around)', w / 2, h - 90, 22, '#fff');
   hctx.font = '13px Trebuchet MS, sans-serif'; hctx.textAlign = 'center'; hctx.fillStyle = '#ffffffb0';
   if (spectating()) hctx.fillText('Mouse look around · 1 2 3 pick what to throw · click throw · Esc settings', w / 2, h - 14);
-  else hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block · Q feint · F kick · T taunt · Esc settings', w / 2, h - 14);
+  else hctx.fillText('WASD move · Shift sprint · click light attack, hold heavy · steer the mouse to pick a side · right click block (cancels your swing) · F kick · T taunt · Esc settings', w / 2, h - 14);
 }
 
 // ---------- the Wheel of Weapons ----------

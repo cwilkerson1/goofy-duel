@@ -7,8 +7,8 @@
 //   release to swing. A quick release is a light attack; holding past HEAVY_AT winds up a heavy one,
 //   which swings slower, recovers slower, hits half again as hard and staggers through a block.
 // - Block by holding block and moving the mouse toward the side the attack comes from.
-// - Feint (Q, or block) to cancel an attack: any time while winding up, or early in the swing itself
-//   before it connects. Kick is unblockable and interrupts.
+// - Feint by pressing block to cancel an attack: any time while winding up, or mid-swing
+//   until it connects. Kick is unblockable and interrupts.
 // - Sprint (Shift) when idle and moving forward; it burns stamina.
 // - Attacking into an incoming swing from the matching side, just in time, is a chamber.
 
@@ -29,7 +29,6 @@ export const T = {
   HEAVY_AT: 0.43,    // hold this long and the attack becomes heavy (scaled by the weapon's wind-up speed)
   MAX_HOLD: 2.5,     // auto-release after this
   ACTIVE: 0.18, RECOVER: 0.32, BOUNCE: 0.5,
-  FEINT_IN: 0.55,
   COMBO_AT: 0.5,     // from this far through a normal recovery you can wind up the next attack    // a swing can still be cancelled during this first fraction of it, if it hasn't hit yet
   CHAMBER: 0.14,     // a fresh swing this young chambers an incoming one from the matching side
   KICK: 0.42, KICK_HIT: [0.12, 0.26],
@@ -492,12 +491,12 @@ export function startHold(p, dir) {
   return true;
 }
 export function releaseHold(p) { if (p.state === 'hold') p.release = true; else if (p.queued) p.queued.release = true; }
-// Cancel an attack: any time during the wind-up, or early in the swing before it connects.
+// Cancel an attack (pressing block): any time during the wind-up, or mid-swing as long as it hasn't connected.
 export function feint(p, room) {
   if (p.dead) return false;
   p.queued = null;
   if (p.state === 'hold') { p.state = 'idle'; p.st = 0; p.cd = 0.15; spend(p, COST.feint * wpn(p).stam); }
-  else if (p.state === 'active' && !p.hitDone && p.st < tm(p, 'ACTIVE') * T.FEINT_IN) { p.state = 'idle'; p.st = 0; p.cd = 0.2; p.heavy = false; spend(p, COST.swingFeint * wpn(p).stam); }
+  else if (p.state === 'active' && !p.hitDone) { p.state = 'idle'; p.st = 0; p.cd = 0.2; p.heavy = false; spend(p, COST.swingFeint * wpn(p).stam); }
   else return false;
   room.events.push({ t: 'feint', id: p.id });
   return true;
